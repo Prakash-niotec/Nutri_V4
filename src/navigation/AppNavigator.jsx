@@ -1,14 +1,23 @@
 import React from 'react';
-import { View } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import AuthNavigator from './AuthNavigator';
+import MainNavigator from './MainNavigator';
+import { useAuth } from '../hooks/useAuth';
 
 const Stack = createStackNavigator();
 
 export default function AppNavigator() {
-  // Mock auth state for phase 1
-  const isAuthenticated = false; // Set false to show Onboarding/Auth
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEF5EE' }}>
+        <ActivityIndicator size="large" color="#009933" />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
@@ -22,7 +31,7 @@ export default function AppNavigator() {
         ) : (
           <Stack.Screen 
             name="MainNavigator" 
-            component={() => <View style={{ flex: 1 }} />}
+            component={MainNavigator}
             options={{ animationEnabled: false }}
           />
         )}

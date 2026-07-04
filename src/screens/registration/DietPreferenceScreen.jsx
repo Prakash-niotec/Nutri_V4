@@ -8,12 +8,16 @@ import {
   ScrollView,
   Platform,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { typography } from '../../utils/typography';
+import { updateUserProfile } from '../../services/firebase/userService';
 
-const DietPreferenceScreen = ({ navigation }) => {
+const DietPreferenceScreen = ({ navigation, route }) => {
+  const { userId, userName, email } = route?.params || {};
   const [selectedDiet, setSelectedDiet] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   const dietOptions = [
     {
@@ -104,15 +108,36 @@ const DietPreferenceScreen = ({ navigation }) => {
         {/* Bottom Next Button */}
         <View style={styles.bottomContainer}>
           <TouchableOpacity 
-            style={[styles.nextButton, !selectedDiet && styles.nextButtonDisabled]} 
+            style={[styles.nextButton, (!selectedDiet || loading) && styles.nextButtonDisabled]} 
             activeOpacity={0.8}
-            disabled={!selectedDiet}
-            onPress={() => {
-              // Proceed to next screen
-              navigation.navigate('MedicalConditionScreen');
+            disabled={!selectedDiet || loading}
+            onPress={async () => {
+              setLoading(true);
+              try {
+                if (userId) {
+                  await updateUserProfile(userId, {
+                    dietPreference: selectedDiet,
+                    updatedAt: new Date().toISOString()
+                  });
+                }
+              } catch (error) {
+                console.error('Error saving diet preference:', error);
+              } finally {
+                setLoading(false);
+                navigation.navigate('MedicalConditionScreen', {
+                  userId,
+                  userName,
+                  email,
+                  dietPreference: selectedDiet
+                });
+              }
             }}
           >
-            <Text style={styles.nextButtonText}>Next</Text>
+            {loading ? (
+              <ActivityIndicator color="#000000" size="small" />
+            ) : (
+              <Text style={styles.nextButtonText}>Next</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>

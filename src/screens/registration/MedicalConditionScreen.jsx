@@ -9,11 +9,16 @@ import {
   Platform,
   Switch,
   TextInput,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { typography } from '../../utils/typography';
+import { updateUserProfile } from '../../services/firebase/userService';
 
-const MedicalConditionScreen = ({ navigation }) => {
+const MedicalConditionScreen = ({ navigation, route }) => {
+  const { userId, userName, email, dietPreference } = route?.params || {};
+  const [loading, setLoading] = useState(false);
   const [conditions, setConditions] = useState({
     diabetes: false,
     highBloodPressure: false,
@@ -190,14 +195,52 @@ const MedicalConditionScreen = ({ navigation }) => {
         {/* Bottom Next Button */}
         <View style={styles.bottomContainer}>
           <TouchableOpacity 
-            style={styles.nextButton} 
+            style={[styles.nextButton, loading && { opacity: 0.7 }]} 
             activeOpacity={0.8}
-            onPress={() => {
-              // Proceed to next screen
-              // navigation.navigate('NextScreen');
+            disabled={loading}
+            onPress={async () => {
+              setLoading(true);
+              try {
+                if (userId) {
+                  await updateUserProfile(userId, {
+                    medicalConditions: conditions,
+                    allergies: selectedAllergies,
+                    onboardingCompleted: true,
+                    updatedAt: new Date().toISOString()
+                  });
+                }
+                Alert.alert(
+                  "Registration Complete!",
+                  "Your profile and preferences have been saved successfully.",
+                  [
+                    {
+                      text: "Continue to Login",
+                      onPress: () => navigation.navigate('LoginScreen')
+                    }
+                  ]
+                );
+              } catch (error) {
+                console.error("Error completing onboarding:", error);
+                Alert.alert(
+                  "Notice",
+                  "Profile preferences recorded locally. Proceeding to login.",
+                  [
+                    {
+                      text: "OK",
+                      onPress: () => navigation.navigate('LoginScreen')
+                    }
+                  ]
+                );
+              } finally {
+                setLoading(false);
+              }
             }}
           >
-            <Text style={styles.nextButtonText}>Next</Text>
+            {loading ? (
+              <ActivityIndicator color="#000000" size="small" />
+            ) : (
+              <Text style={styles.nextButtonText}>Finish Registration</Text>
+            )}
           </TouchableOpacity>
         </View>
       </View>

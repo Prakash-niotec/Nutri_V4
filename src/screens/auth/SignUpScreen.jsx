@@ -8,13 +8,16 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
-  ScrollView
+  ScrollView,
+  ActivityIndicator,
+  Alert
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors } from '../../utils/colors';
 import { typography } from '../../utils/typography';
+import { registerUser } from '../../services/firebase/authService';
 
-const InputField = ({ icon, placeholder, secureTextEntry, value, onChangeText, error }) => {
+const InputField = ({ icon, placeholder, secureTextEntry, value, onChangeText, error, keyboardType, autoCapitalize }) => {
   return (
     <View style={styles.inputWrapper}>
       <View style={[styles.inputContainer, error && styles.inputError]}>
@@ -26,6 +29,8 @@ const InputField = ({ icon, placeholder, secureTextEntry, value, onChangeText, e
           secureTextEntry={secureTextEntry}
           value={value}
           onChangeText={onChangeText}
+          keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
         />
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -39,8 +44,10 @@ const SignUpScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState({});
+  const [generalError, setGeneralError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     let newErrors = {};
 
     if (!userName.trim()) {
@@ -66,10 +73,33 @@ const SignUpScreen = ({ navigation }) => {
     }
 
     setErrors(newErrors);
+    setGeneralError('');
 
     if (Object.keys(newErrors).length === 0) {
-      // Validation passed, navigate to DietPreferenceScreen
-      navigation.navigate('DietPreferenceScreen');
+      setLoading(true);
+      try {
+        const user = await registerUser(email.trim(), password, userName.trim());
+        navigation.navigate('DietPreferenceScreen', {
+          userId: user.uid,
+          userName: userName.trim(),
+          email: email.trim(),
+        });
+      } catch (error) {
+        console.error('Registration error:', error);
+        let msg = 'Failed to create account. Please try again.';
+        if (error.code === 'auth/email-already-in-use') {
+          msg = 'An account with this email address already exists.';
+        } else if (error.code === 'auth/weak-password') {
+          msg = 'Password must be at least 6 characters long.';
+        } else if (error.code === 'auth/invalid-email') {
+          msg = 'The email address format is invalid.';
+        } else if (error.message) {
+          msg = error.message;
+        }
+        setGeneralError(msg);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -95,28 +125,48 @@ const SignUpScreen = ({ navigation }) => {
             <Text style={styles.subtitle}>create an account to continue!</Text>
           </View>
 
+          {/* General Error Banner */}
+          {generalError ? (
+            <View style={styles.errorBanner}>
+              <Feather name="alert-circle" size={18} color="#E74C3C" style={{ marginRight: 8 }} />
+              <Text style={styles.errorBannerText}>{generalError}</Text>
+            </View>
+          ) : null}
+
           {/* Form */}
           <View style={styles.formContainer}>
             <InputField
               icon="user"
               placeholder="User Name"
               value={userName}
-              onChangeText={setUserName}
+              onChangeText={(text) => {
+                setUserName(text);
+                if (errors.userName) setErrors({ ...errors, userName: null });
+              }}
               error={errors.userName}
+              autoCapitalize="words"
             />
             <InputField
               icon="mail"
               placeholder="E-mail"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (errors.email) setErrors({ ...errors, email: null });
+              }}
               error={errors.email}
+              keyboardType="email-address"
+              autoCapitalize="none"
             />
             <InputField
               icon="lock"
               placeholder="Password"
               secureTextEntry
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (errors.password) setErrors({ ...errors, password: null });
+              }}
               error={errors.password}
             />
             <InputField
@@ -124,16 +174,24 @@ const SignUpScreen = ({ navigation }) => {
               placeholder="Confirm Password"
               secureTextEntry
               value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              onChangeText={(text) => {
+                setConfirmPassword(text);
+                if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: null });
+              }}
               error={errors.confirmPassword}
             />
 
             <TouchableOpacity 
-              style={styles.signupButton} 
+              style={[styles.signupButton, loading && styles.signupButtonDisabled]} 
               activeOpacity={0.8}
               onPress={handleSignUp}
+              disabled={loading}
             >
-              <Text style={styles.signupButtonText}>SignUp</Text>
+              {loading ? (
+                <ActivityIndicator color={colors.backgroundWhite} size="small" />
+              ) : (
+                <Text style={styles.signupButtonText}>SignUp</Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.loginLink} onPress={() => navigation?.navigate('LoginScreen')}>
@@ -199,6 +257,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FCEBEA',
+    borderWidth: 1,
+    borderColor: '#E74C3C',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontFamily: typography.fonts.medium,
+    fontSize: 13,
+    color: '#E74C3C',
+    lineHeight: 18,
+  },
   formContainer: {
     gap: 15,
   },
@@ -250,6 +326,10 @@ const styles = StyleSheet.create({
     elevation: 3,
     alignSelf: 'center',
     paddingHorizontal: 40,
+    minWidth: 180,
+  },
+  signupButtonDisabled: {
+    opacity: 0.7,
   },
   signupButtonText: {
     color: colors.backgroundWhite,
