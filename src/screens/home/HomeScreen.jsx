@@ -8,20 +8,18 @@ import {
   TouchableOpacity,
   Image,
   Platform,
-  StatusBar
+  StatusBar,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { typography } from '../../utils/typography';
 import { colors } from '../../utils/colors';
 import { useAuth } from '../../hooks/useAuth';
+import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 
 const HomeScreen = ({ navigation }) => {
   const { userProfile, user } = useAuth();
 
-  // Get user name from profile or auth object, fallback to 'Jessica' for mockup presentation
   const userName = userProfile?.fullName || user?.displayName || userProfile?.userName || 'Jessica';
-
-  // Extract first name for greeting
   const firstName = userName.split(' ')[0];
 
   return (
@@ -39,7 +37,7 @@ const HomeScreen = ({ navigation }) => {
           </View>
           <Text style={styles.headerTitle}>NutriLens</Text>
           <TouchableOpacity style={styles.notificationButton} activeOpacity={0.7}>
-            <Feather name="bell" size={24} color="#212121" />
+            <Feather name="bell" size={fs(22)} color="#212121" />
           </TouchableOpacity>
         </View>
 
@@ -64,7 +62,6 @@ const HomeScreen = ({ navigation }) => {
 
           {/* Scan Mode Cards */}
           <View style={styles.scanCardsRow}>
-            {/* Veg / Fruits Card */}
             <TouchableOpacity
               style={styles.scanCard}
               activeOpacity={0.8}
@@ -72,7 +69,7 @@ const HomeScreen = ({ navigation }) => {
             >
               <View style={styles.scanCardImageBox}>
                 <Image
-                  source={require('../../assets/images/vegi.png')}
+                  source={require('../../assets/images/veg_fruits.png')}
                   style={styles.scanCardImage}
                   resizeMode="contain"
                 />
@@ -80,7 +77,6 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.scanCardTitle}>Veg / Fruits</Text>
             </TouchableOpacity>
 
-            {/* Packed Food Card */}
             <TouchableOpacity
               style={styles.scanCard}
               activeOpacity={0.8}
@@ -88,8 +84,8 @@ const HomeScreen = ({ navigation }) => {
             >
               <View style={styles.scanCardImageBox}>
                 <Image
-                  source={require('../../assets/images/pack.png')}
-                  style={[styles.scanCardImage, { width: 85, height: 70 }]}
+                  source={require('../../assets/images/packed_food.png')}
+                  style={styles.scanCardImage}
                   resizeMode="contain"
                 />
               </View>
@@ -97,7 +93,7 @@ const HomeScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
 
-          {/* Health Level Indicator Card */}
+          {/* Health Level Card */}
           <View style={styles.healthCard}>
             <View style={styles.healthCardHeader}>
               <Text style={styles.healthCardTitle}>Health Level</Text>
@@ -105,13 +101,9 @@ const HomeScreen = ({ navigation }) => {
                 <Text style={styles.optimalBadgeText}>80% Optimal</Text>
               </View>
             </View>
-
-            {/* Progress Bar */}
             <View style={styles.progressBarTrack}>
               <View style={[styles.progressBarFill, { width: '80%' }]} />
             </View>
-
-            {/* Labels */}
             <View style={styles.healthCardFooter}>
               <Text style={styles.footerLabel}>IMPROVING</Text>
               <Text style={styles.footerLabel}>DAILY GOAL</Text>
@@ -136,14 +128,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 15 : 10,
-    paddingBottom: 15,
+    paddingHorizontal: wp(5),
+    paddingTop: Platform.OS === 'android' ? STATUS_BAR_HEIGHT + hp(1) : hp(1),
+    paddingBottom: hp(1.5),
   },
   logoContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: wp(10),
+    height: wp(10),
+    borderRadius: wp(5),
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
@@ -154,31 +146,31 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   logoIcon: {
-    width: 24,
-    height: 24,
+    width: wp(6),
+    height: wp(6),
   },
   headerTitle: {
     fontFamily: typography.fonts.bold,
-    fontSize: 22,
+    fontSize: fs(22),
     color: '#009933',
   },
   notificationButton: {
-    width: 40,
-    height: 40,
+    width: wp(10),
+    height: wp(10),
     justifyContent: 'center',
     alignItems: 'flex-end',
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingHorizontal: wp(5),
+    paddingBottom: hp(12),
   },
   greetingCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
+    borderRadius: wp(6),
+    padding: wp(4),
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: hp(2),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -186,47 +178,47 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   avatarContainer: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: wp(17),
+    height: wp(17),
+    borderRadius: wp(8.5),
     backgroundColor: '#D2F0DA',
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    marginRight: 16,
+    marginRight: wp(4),
     borderWidth: 2,
     borderColor: '#A8E3B9',
   },
   avatarImage: {
-    width: 95,
-    height: 95,
-    marginTop: 10,
+    width: wp(21),
+    height: wp(21),
+    marginTop: hp(1),
   },
   greetingTextContainer: {
     flex: 1,
   },
   greetingTitle: {
     fontFamily: typography.fonts.bold,
-    fontSize: 24,
+    fontSize: fs(22),
     color: '#1A1A1A',
-    marginBottom: 4,
+    marginBottom: hp(0.3),
   },
   greetingSubtitle: {
     fontFamily: typography.fonts.regular,
-    fontSize: 15,
+    fontSize: fs(14),
     color: '#555555',
   },
   scanCardsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 16,
-    marginBottom: 20,
+    gap: wp(3.5),
+    marginBottom: hp(2),
   },
   scanCard: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: wp(6),
+    padding: wp(3.5),
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -236,66 +228,67 @@ const styles = StyleSheet.create({
   },
   scanCardImageBox: {
     width: '100%',
-    height: 110,
+    height: hp(14),
     backgroundColor: '#F7F9F7',
-    borderRadius: 16,
+    borderRadius: wp(4),
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: hp(1.2),
+    overflow: 'hidden',
   },
   scanCardImage: {
-    width: 80,
-    height: 80,
+    width: wp(22),
+    height: wp(22),
   },
   scanCardTitle: {
     fontFamily: typography.fonts.bold,
-    fontSize: 18,
+    fontSize: fs(16),
     color: '#1A1A1A',
   },
   healthCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 22,
+    borderRadius: wp(6),
+    padding: wp(5),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 3,
-    marginBottom: 20,
+    marginBottom: hp(2),
   },
   healthCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: hp(1.8),
   },
   healthCardTitle: {
     fontFamily: typography.fonts.bold,
-    fontSize: 20,
+    fontSize: fs(18),
     color: '#1A1A1A',
   },
   optimalBadge: {
     backgroundColor: '#E2F6E8',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(0.7),
+    borderRadius: wp(3.5),
   },
   optimalBadgeText: {
     fontFamily: typography.fonts.semiBold,
-    fontSize: 13,
+    fontSize: fs(12),
     color: '#198754',
   },
   progressBarTrack: {
-    height: 24,
+    height: hp(2.8),
     backgroundColor: '#E2EFE3',
-    borderRadius: 12,
+    borderRadius: wp(3),
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: hp(1.2),
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: '#2ECC71',
-    borderRadius: 12,
+    borderRadius: wp(3),
   },
   healthCardFooter: {
     flexDirection: 'row',
@@ -304,7 +297,7 @@ const styles = StyleSheet.create({
   },
   footerLabel: {
     fontFamily: typography.fonts.bold,
-    fontSize: 11,
+    fontSize: fs(11),
     color: '#666666',
     letterSpacing: 0.5,
   },

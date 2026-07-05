@@ -1,26 +1,27 @@
 import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { typography } from '../../utils/typography';
+import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 
 const ScanScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.iconCircle}>
-          <Feather name="camera" size={48} color="#009933" />
+          <Feather name="camera" size={fs(44)} color="#009933" />
         </View>
         <Text style={styles.title}>Food & Label Scanner</Text>
         <Text style={styles.subtitle}>
           Position your produce or nutrition label within the camera frame to analyze ingredients and health guidelines.
         </Text>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.actionButton}
           activeOpacity={0.8}
           onPress={() => alert('Camera scanning feature ready to be integrated!')}
         >
-          <Feather name="maximize" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <Feather name="maximize" size={fs(18)} color="#FFFFFF" style={{ marginRight: wp(2) }} />
           <Text style={styles.actionButtonText}>Start Scanning</Text>
         </TouchableOpacity>
       </View>
@@ -37,41 +38,42 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 30,
+    paddingHorizontal: wp(8),
+    paddingTop: Platform.OS === 'android' ? STATUS_BAR_HEIGHT : 0,
   },
   iconCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: wp(25),
+    height: wp(25),
+    borderRadius: wp(12.5),
     backgroundColor: '#D2F0DA',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: hp(3),
     borderWidth: 2,
     borderColor: '#A8E3B9',
   },
   title: {
     fontFamily: typography.fonts.bold,
-    fontSize: 26,
+    fontSize: fs(24),
     color: '#1A1A1A',
-    marginBottom: 12,
+    marginBottom: hp(1.5),
     textAlign: 'center',
   },
   subtitle: {
     fontFamily: typography.fonts.regular,
-    fontSize: 15,
+    fontSize: fs(14),
     color: '#555555',
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
+    lineHeight: fs(14) * 1.6,
+    marginBottom: hp(4),
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#009933',
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 25,
+    paddingHorizontal: wp(8),
+    paddingVertical: hp(2),
+    borderRadius: wp(6.5),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
@@ -80,7 +82,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     fontFamily: typography.fonts.bold,
-    fontSize: 16,
+    fontSize: fs(15),
     color: '#FFFFFF',
   },
 });

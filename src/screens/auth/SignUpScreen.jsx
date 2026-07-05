@@ -16,12 +16,13 @@ import { Feather } from '@expo/vector-icons';
 import { colors } from '../../utils/colors';
 import { typography } from '../../utils/typography';
 import { registerUser } from '../../services/firebase/authService';
+import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 
 const InputField = ({ icon, placeholder, secureTextEntry, value, onChangeText, error, keyboardType, autoCapitalize }) => {
   return (
     <View style={styles.inputWrapper}>
       <View style={[styles.inputContainer, error && styles.inputError]}>
-        <Feather name={icon} size={20} color={error ? colors.primaryRed : "#212121"} style={styles.icon} />
+        <Feather name={icon} size={fs(18)} color={error ? colors.primaryRed : "#212121"} style={styles.icon} />
         <TextInput
           style={styles.input}
           placeholder={placeholder}
@@ -53,7 +54,7 @@ const SignUpScreen = ({ navigation }) => {
     if (!userName.trim()) {
       newErrors.userName = 'Username is required';
     }
-    
+
     if (!email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(email)) {
@@ -105,18 +106,18 @@ const SignUpScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView 
-        style={styles.container} 
+      <KeyboardAvoidingView
+        style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation?.goBack()} style={styles.backButton}>
-              <Feather name="chevron-left" size={32} color="#212121" />
+              <Feather name="chevron-left" size={fs(28)} color="#212121" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>NutriLens</Text>
-            <View style={{ width: 32 }} /> {/* Placeholder for balance */}
+            <View style={{ width: wp(8) }} />
           </View>
 
           {/* Titles */}
@@ -128,7 +129,7 @@ const SignUpScreen = ({ navigation }) => {
           {/* General Error Banner */}
           {generalError ? (
             <View style={styles.errorBanner}>
-              <Feather name="alert-circle" size={18} color="#E74C3C" style={{ marginRight: 8 }} />
+              <Feather name="alert-circle" size={fs(16)} color="#E74C3C" style={{ marginRight: wp(2) }} />
               <Text style={styles.errorBannerText}>{generalError}</Text>
             </View>
           ) : null}
@@ -181,8 +182,8 @@ const SignUpScreen = ({ navigation }) => {
               error={errors.confirmPassword}
             />
 
-            <TouchableOpacity 
-              style={[styles.signupButton, loading && styles.signupButtonDisabled]} 
+            <TouchableOpacity
+              style={[styles.signupButton, loading && styles.signupButtonDisabled]}
               activeOpacity={0.8}
               onPress={handleSignUp}
               disabled={loading}
@@ -216,45 +217,45 @@ const SignUpScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#EEF5EE', // Light greenish tint
+    backgroundColor: '#EEF5EE',
   },
   container: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 120, // space for waves
+    paddingHorizontal: wp(6),
+    paddingBottom: hp(15),
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: Platform.OS === 'android' ? 20 : 10,
-    marginBottom: 40,
+    marginTop: Platform.OS === 'android' ? STATUS_BAR_HEIGHT + hp(1) : hp(1),
+    marginBottom: hp(4),
   },
   backButton: {
-    padding: 4,
-    marginLeft: -10,
+    padding: wp(1),
+    marginLeft: -wp(2.5),
   },
   headerTitle: {
     fontFamily: typography.fonts.bold,
-    fontSize: 20,
+    fontSize: fs(20),
     color: '#2ECC71',
     letterSpacing: 0.5,
   },
   titleContainer: {
-    marginBottom: 40,
+    marginBottom: hp(4),
   },
   title: {
     fontFamily: typography.fonts.bold,
-    fontSize: 36,
+    fontSize: fs(34),
     color: '#2ECC71',
-    marginBottom: 8,
+    marginBottom: hp(1),
   },
   subtitle: {
     fontFamily: typography.fonts.regular,
-    fontSize: 16,
+    fontSize: fs(15),
     color: '#333',
   },
   errorBanner: {
@@ -263,20 +264,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#FCEBEA',
     borderWidth: 1,
     borderColor: '#E74C3C',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 20,
+    borderRadius: wp(3),
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.5),
+    marginBottom: hp(2.5),
   },
   errorBannerText: {
     flex: 1,
     fontFamily: typography.fonts.medium,
-    fontSize: 13,
+    fontSize: fs(12),
     color: '#E74C3C',
-    lineHeight: 18,
+    lineHeight: fs(12) * 1.5,
   },
   formContainer: {
-    gap: 15,
+    gap: hp(1.8),
   },
   inputWrapper: {
     width: '100%',
@@ -284,12 +285,12 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E5EFE6', // Slightly darker than background
+    backgroundColor: '#E5EFE6',
     borderWidth: 1,
     borderColor: '#2ECC71',
-    borderRadius: 25,
-    paddingHorizontal: 16,
-    height: 54,
+    borderRadius: wp(6.5),
+    paddingHorizontal: wp(4),
+    height: hp(6.5),
   },
   inputError: {
     borderColor: colors.primaryRed,
@@ -298,35 +299,35 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.primaryRed,
     fontFamily: typography.fonts.medium,
-    fontSize: 12,
-    marginTop: 4,
-    marginLeft: 16,
+    fontSize: fs(11),
+    marginTop: hp(0.5),
+    marginLeft: wp(4),
   },
   icon: {
-    marginRight: 12,
+    marginRight: wp(3),
   },
   input: {
     flex: 1,
     fontFamily: typography.fonts.regular,
-    fontSize: 16,
+    fontSize: fs(15),
     color: '#212121',
     height: '100%',
   },
   signupButton: {
-    backgroundColor: '#009933', // Darker green
-    borderRadius: 25,
-    height: 54,
+    backgroundColor: '#009933',
+    borderRadius: wp(6.5),
+    height: hp(6.5),
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: hp(1),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 3,
     elevation: 3,
     alignSelf: 'center',
-    paddingHorizontal: 40,
-    minWidth: 180,
+    paddingHorizontal: wp(10),
+    minWidth: wp(45),
   },
   signupButtonDisabled: {
     opacity: 0.7,
@@ -334,15 +335,15 @@ const styles = StyleSheet.create({
   signupButtonText: {
     color: colors.backgroundWhite,
     fontFamily: typography.fonts.bold,
-    fontSize: 18,
+    fontSize: fs(17),
   },
   loginLink: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: hp(2.5),
   },
   loginText: {
     fontFamily: typography.fonts.semiBold,
-    fontSize: 16,
+    fontSize: fs(15),
     color: '#2E7D32',
   },
   loginTextBold: {
@@ -353,7 +354,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 150,
+    height: hp(18),
     overflow: 'hidden',
     zIndex: -1,
   },
@@ -362,26 +363,26 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   circleLeft: {
-    width: 250,
-    height: 250,
+    width: wp(62),
+    height: wp(62),
     backgroundColor: '#72DA96',
-    bottom: -150,
-    left: -100,
+    bottom: -hp(18),
+    left: -wp(25),
   },
   circleMiddle: {
-    width: 320,
-    height: 320,
+    width: wp(80),
+    height: wp(80),
     backgroundColor: '#5CD084',
-    bottom: -180,
+    bottom: -hp(22),
     left: '50%',
-    marginLeft: -160,
+    marginLeft: -wp(40),
   },
   circleRight: {
-    width: 220,
-    height: 220,
+    width: wp(55),
+    height: wp(55),
     backgroundColor: '#5CD084',
-    bottom: -120,
-    right: -80,
+    bottom: -hp(15),
+    right: -wp(20),
   },
 });
 

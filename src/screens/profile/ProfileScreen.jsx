@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { typography } from '../../utils/typography';
 import { useAuth } from '../../hooks/useAuth';
+import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 
 const ProfileScreen = ({ navigation }) => {
   const { userProfile, user, logout } = useAuth();
@@ -28,11 +29,11 @@ const ProfileScreen = ({ navigation }) => {
 
         <View style={styles.profileCard}>
           <View style={styles.avatarCircle}>
-            <Feather name="user" size={40} color="#009933" />
+            <Feather name="user" size={fs(36)} color="#009933" />
           </View>
           <Text style={styles.nameText}>{userName}</Text>
           <Text style={styles.emailText}>{userEmail}</Text>
-          
+
           <View style={styles.badgeContainer}>
             <Text style={styles.badgeText}>{dietPreference.toUpperCase()}</Text>
           </View>
@@ -40,32 +41,32 @@ const ProfileScreen = ({ navigation }) => {
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Account Settings</Text>
-          
+
           <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}>
-            <Feather name="heart" size={20} color="#009933" style={styles.rowIcon} />
+            <Feather name="heart" size={fs(18)} color="#009933" style={styles.rowIcon} />
             <Text style={styles.rowText}>Medical Conditions & Allergies</Text>
-            <Feather name="chevron-right" size={20} color="#999999" />
+            <Feather name="chevron-right" size={fs(18)} color="#999999" />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}>
-            <Feather name="users" size={20} color="#009933" style={styles.rowIcon} />
+            <Feather name="users" size={fs(18)} color="#009933" style={styles.rowIcon} />
             <Text style={styles.rowText}>Family Members</Text>
-            <Feather name="chevron-right" size={20} color="#999999" />
+            <Feather name="chevron-right" size={fs(18)} color="#999999" />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}>
-            <Feather name="shield" size={20} color="#009933" style={styles.rowIcon} />
+            <Feather name="shield" size={fs(18)} color="#009933" style={styles.rowIcon} />
             <Text style={styles.rowText}>Privacy & Security</Text>
-            <Feather name="chevron-right" size={20} color="#999999" />
+            <Feather name="chevron-right" size={fs(18)} color="#999999" />
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
-          style={styles.logoutButton} 
+        <TouchableOpacity
+          style={styles.logoutButton}
           activeOpacity={0.8}
           onPress={handleLogout}
         >
-          <Feather name="log-out" size={20} color="#E74C3C" style={{ marginRight: 8 }} />
+          <Feather name="log-out" size={fs(18)} color="#E74C3C" style={{ marginRight: wp(2) }} />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -79,24 +80,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF5EE',
   },
   container: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingHorizontal: wp(5),
+    paddingBottom: hp(12),
+    paddingTop: Platform.OS === 'android' ? STATUS_BAR_HEIGHT : 0,
   },
   header: {
-    paddingVertical: 20,
+    paddingVertical: hp(2.5),
     alignItems: 'center',
   },
   headerTitle: {
     fontFamily: typography.fonts.bold,
-    fontSize: 24,
+    fontSize: fs(22),
     color: '#009933',
   },
   profileCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 24,
+    borderRadius: wp(6),
+    padding: wp(6),
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: hp(2.5),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -104,44 +106,44 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   avatarCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: wp(20),
+    height: wp(20),
+    borderRadius: wp(10),
     backgroundColor: '#D2F0DA',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: hp(2),
     borderWidth: 2,
     borderColor: '#A8E3B9',
   },
   nameText: {
     fontFamily: typography.fonts.bold,
-    fontSize: 22,
+    fontSize: fs(20),
     color: '#1A1A1A',
-    marginBottom: 4,
+    marginBottom: hp(0.5),
   },
   emailText: {
     fontFamily: typography.fonts.regular,
-    fontSize: 14,
+    fontSize: fs(13),
     color: '#666666',
-    marginBottom: 16,
+    marginBottom: hp(2),
   },
   badgeContainer: {
     backgroundColor: '#E2F6E8',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(0.7),
+    borderRadius: wp(4),
   },
   badgeText: {
     fontFamily: typography.fonts.semiBold,
-    fontSize: 12,
+    fontSize: fs(11),
     color: '#198754',
   },
   sectionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 20,
+    borderRadius: wp(6),
+    padding: wp(5),
+    marginBottom: hp(2.5),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -150,24 +152,24 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontFamily: typography.fonts.bold,
-    fontSize: 18,
+    fontSize: fs(16),
     color: '#1A1A1A',
-    marginBottom: 16,
+    marginBottom: hp(2),
   },
   rowItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: hp(1.7),
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
   rowIcon: {
-    marginRight: 16,
+    marginRight: wp(4),
   },
   rowText: {
     flex: 1,
     fontFamily: typography.fonts.medium,
-    fontSize: 15,
+    fontSize: fs(14),
     color: '#333333',
   },
   logoutButton: {
@@ -175,14 +177,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FCEBEA',
-    paddingVertical: 16,
-    borderRadius: 24,
+    paddingVertical: hp(2),
+    borderRadius: wp(6),
     borderWidth: 1,
     borderColor: '#E74C3C',
   },
   logoutText: {
     fontFamily: typography.fonts.bold,
-    fontSize: 16,
+    fontSize: fs(15),
     color: '#E74C3C',
   },
 });

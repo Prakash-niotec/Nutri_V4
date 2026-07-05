@@ -6,6 +6,7 @@ import HomeScreen from '../screens/home/HomeScreen';
 import ScanScreen from '../screens/scanning/ScanScreen';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import { typography } from '../utils/typography';
+import { wp, hp, fs } from '../utils/responsive';
 
 const Tab = createBottomTabNavigator();
 
@@ -16,7 +17,7 @@ const CustomScanButton = ({ onPress }) => (
     activeOpacity={0.85}
   >
     <View style={styles.customScanButtonCircle}>
-      <Feather name="camera" size={28} color="#FFFFFF" />
+      <Feather name="camera" size={fs(26)} color="#FFFFFF" />
     </View>
     <Text style={styles.customScanButtonLabel}>Scan</Text>
   </TouchableOpacity>
@@ -32,8 +33,8 @@ export default function MainNavigator() {
         tabBarInactiveTintColor: '#666666',
         tabBarLabelStyle: {
           fontFamily: typography.fonts.semiBold,
-          fontSize: 12,
-          paddingBottom: Platform.OS === 'android' ? 8 : 4,
+          fontSize: fs(11),
+          paddingBottom: Platform.OS === 'android' ? hp(1) : hp(0.5),
         },
         tabBarStyle: styles.tabBar,
       }}
@@ -43,8 +44,8 @@ export default function MainNavigator() {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="home" size={24} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Feather name="home" size={fs(22)} color={color} />
           ),
         }}
       />
@@ -63,8 +64,8 @@ export default function MainNavigator() {
         component={ProfileScreen}
         options={{
           tabBarLabel: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="user" size={24} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Feather name="user" size={fs(22)} color={color} />
           ),
         }}
       />
@@ -75,7 +76,7 @@ export default function MainNavigator() {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: '#FFFFFF',
-    height: Platform.OS === 'ios' ? 85 : 70,
+    height: Platform.OS === 'ios' ? hp(10.5) : hp(8.5),
     borderTopWidth: 0,
     elevation: 15,
     shadowColor: '#000000',
@@ -88,15 +89,15 @@ const styles = StyleSheet.create({
     right: 0,
   },
   customScanButtonWrapper: {
-    top: -22,
+    top: -hp(2.5),
     justifyContent: 'center',
     alignItems: 'center',
     flex: 1,
   },
   customScanButtonCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: wp(15),
+    height: wp(15),
+    borderRadius: wp(7.5),
     backgroundColor: '#009933',
     justifyContent: 'center',
     alignItems: 'center',
@@ -110,8 +111,8 @@ const styles = StyleSheet.create({
   },
   customScanButtonLabel: {
     fontFamily: typography.fonts.semiBold,
-    fontSize: 12,
+    fontSize: fs(11),
     color: '#009933',
-    marginTop: 2,
+    marginTop: hp(0.3),
   },
 });

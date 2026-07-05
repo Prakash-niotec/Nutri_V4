@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { typography } from '../../utils/typography';
+import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 
 const TermsAndConditionsScreen = ({ navigation }) => {
   const [agreed, setAgreed] = useState(false);
@@ -51,10 +52,10 @@ const TermsAndConditionsScreen = ({ navigation }) => {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="chevron-back" size={28} color="#000" />
+            <Ionicons name="chevron-back" size={fs(26)} color="#000" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>NutriLens</Text>
-          <View style={{ width: 28 }} /> {/* Spacer to center the title */}
+          <View style={{ width: wp(7) }} />
         </View>
 
         <Text style={styles.pageTitle}>Terms & conditions</Text>
@@ -64,7 +65,7 @@ const TermsAndConditionsScreen = ({ navigation }) => {
             {terms.map((item) => (
               <View key={item.id} style={styles.termRow}>
                 <View style={styles.iconContainer}>
-                  <Ionicons name={item.icon} size={32} color={item.iconColor} />
+                  <Ionicons name={item.icon} size={fs(28)} color={item.iconColor} />
                 </View>
                 <View style={styles.textContainer}>
                   <Text style={styles.termTitle}>{item.title}</Text>
@@ -80,7 +81,7 @@ const TermsAndConditionsScreen = ({ navigation }) => {
             onPress={() => setAgreed(!agreed)}
           >
             <View style={[styles.checkbox, agreed && styles.checkboxActive]}>
-              {agreed && <Ionicons name="checkmark" size={18} color="#000" />}
+              {agreed && <Ionicons name="checkmark" size={fs(16)} color="#000" />}
             </View>
             <Text style={styles.checkboxText}>I agree to the Terms & Conditions</Text>
           </TouchableOpacity>
@@ -91,10 +92,7 @@ const TermsAndConditionsScreen = ({ navigation }) => {
           <TouchableOpacity
             style={[styles.acceptButton, !agreed && styles.acceptButtonDisabled]}
             disabled={!agreed}
-            onPress={() => {
-              // Action when accepted
-              navigation.navigate('SignUpScreen'); // Navigate to the registered route name
-            }}
+            onPress={() => navigation.navigate('SignUpScreen')}
           >
             <Text style={styles.acceptButtonText}>Accept & Continue</Text>
           </TouchableOpacity>
@@ -119,76 +117,77 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: wp(6),
+    paddingTop: Platform.OS === 'android' ? STATUS_BAR_HEIGHT : 0,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 15,
+    paddingVertical: hp(1.8),
   },
   backButton: {
-    padding: 5,
-    marginLeft: -5,
+    padding: wp(1),
+    marginLeft: -wp(1),
   },
   headerTitle: {
     fontFamily: typography.fonts.bold,
-    fontSize: 20,
+    fontSize: fs(20),
     color: '#2ecc71',
   },
   pageTitle: {
     fontFamily: typography.fonts.extraBold,
-    fontSize: 22,
+    fontSize: fs(22),
     color: '#000',
-    marginTop: 15,
-    marginBottom: 20,
+    marginTop: hp(1.5),
+    marginBottom: hp(2.5),
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: hp(2),
   },
   card: {
-    backgroundColor: '#E6EFE6', // Light grayish green matching the design
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 25,
+    backgroundColor: '#E6EFE6',
+    borderRadius: wp(4),
+    padding: wp(5),
+    marginBottom: hp(3),
   },
   termRow: {
     flexDirection: 'row',
-    marginBottom: 24,
+    marginBottom: hp(2.5),
   },
   iconContainer: {
-    width: 45,
+    width: wp(11),
     alignItems: 'flex-start',
-    marginRight: 8,
+    marginRight: wp(2),
   },
   textContainer: {
     flex: 1,
   },
   termTitle: {
     fontFamily: typography.fonts.bold,
-    fontSize: 16,
+    fontSize: fs(15),
     color: '#000',
-    marginBottom: 6,
+    marginBottom: hp(0.7),
   },
   termDesc: {
-    fontFamily: typography.fonts.bold, // Text in image is bold for description too!
-    fontSize: 14,
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(13),
     color: '#000',
-    lineHeight: 20,
+    lineHeight: fs(13) * 1.5,
   },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    paddingHorizontal: 5,
+    marginBottom: hp(1),
+    paddingHorizontal: wp(1),
   },
   checkbox: {
-    width: 24,
-    height: 24,
+    width: wp(6),
+    height: wp(6),
     borderWidth: 1.5,
     borderColor: '#000',
     backgroundColor: 'transparent',
-    marginRight: 12,
+    marginRight: wp(3),
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -197,35 +196,35 @@ const styles = StyleSheet.create({
   },
   checkboxText: {
     fontFamily: typography.fonts.bold,
-    fontSize: 16,
+    fontSize: fs(15),
     color: '#000',
   },
   bottomSection: {
-    paddingVertical: 20,
+    paddingVertical: hp(2.5),
     alignItems: 'center',
   },
   acceptButton: {
     backgroundColor: '#2ecc71',
     width: '100%',
-    paddingVertical: 16,
-    borderRadius: 30,
+    paddingVertical: hp(2),
+    borderRadius: wp(7.5),
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: hp(2),
   },
   acceptButtonDisabled: {
     opacity: 0.6,
   },
   acceptButtonText: {
     fontFamily: typography.fonts.bold,
-    fontSize: 18,
+    fontSize: fs(17),
     color: '#000',
   },
   declineButton: {
-    paddingVertical: 10,
+    paddingVertical: hp(1),
   },
   declineButtonText: {
     fontFamily: typography.fonts.bold,
-    fontSize: 16,
+    fontSize: fs(15),
     color: '#e74c3c',
   },
 });

@@ -1,20 +1,19 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
 import Button from '../../components/common/Button';
 import { colors } from '../../utils/colors';
 import { typography } from '../../utils/typography';
-
-const { width } = Dimensions.get('window');
+import { wp, hp, fs, SCREEN_WIDTH } from '../../utils/responsive';
 
 const GetStartedScreen = ({ navigation }) => {
   return (
     <SafeAreaWrapper backgroundColor="#E8F5E9">
       <View style={styles.container}>
-        
+
         {/* Top Section - Illustration */}
         <View style={styles.imageContainer}>
-          <Image 
+          <Image
             source={require('../../assets/images/onboarding-illustration.png')}
             style={styles.illustration}
             resizeMode="cover"
@@ -30,14 +29,14 @@ const GetStartedScreen = ({ navigation }) => {
 
         {/* Bottom Section - Buttons */}
         <View style={styles.buttonContainer}>
-          <Button 
-            title="Get Started" 
-            onPress={() => navigation.navigate('Guideline1')} 
+          <Button
+            title="Get Started"
+            onPress={() => navigation.navigate('Guideline1')}
             variant="primary"
           />
-          <Button 
-            title="Log In" 
-            onPress={() => navigation.navigate('Login')} 
+          <Button
+            title="Log In"
+            onPress={() => navigation.navigate('Login')}
             variant="outline"
           />
         </View>
@@ -53,31 +52,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   imageContainer: {
-    flex: 0.5,
-    width: '100%',
+    flex: 0.55,
+    width: SCREEN_WIDTH,
     alignItems: 'center',
+    justifyContent: 'flex-start',
   },
   illustration: {
-    width: width,
+    width: SCREEN_WIDTH,
     height: '100%',
   },
   textContainer: {
     flex: 0.3,
-    paddingHorizontal: 24,
+    paddingHorizontal: wp(6),
     justifyContent: 'center',
   },
   description: {
     fontFamily: typography.fonts.regular,
-    fontSize: typography.sizes.sm,
+    fontSize: fs(15),
     color: colors.textPrimary,
-    lineHeight: typography.lineHeights.normal * typography.sizes.sm,
+    lineHeight: fs(15) * 1.5,
     textAlign: 'center',
   },
   buttonContainer: {
     flex: 0.2,
-    paddingHorizontal: 24,
-    paddingBottom: 20,
+    paddingHorizontal: wp(6),
+    paddingBottom: hp(2.5),
     justifyContent: 'flex-end',
+    gap: hp(1.5),
   },
 });
 

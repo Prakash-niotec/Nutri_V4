@@ -1,25 +1,20 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
-import SafeAreaWrapper from '../../components/common/SafeAreaWrapper';
-import { colors } from '../../utils/colors';
+import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { typography } from '../../utils/typography';
 import { Ionicons } from '@expo/vector-icons';
-
-const { width, height } = Dimensions.get('window');
+import { wp, hp, fs, SCREEN_WIDTH, SCREEN_HEIGHT } from '../../utils/responsive';
 
 const GuidelineScreen1 = ({ navigation }) => {
   return (
     <View style={styles.container}>
-      {/* Top Image Section with Curved Bottom */}
       <View style={styles.imageWrapper}>
         <Image
           source={require('../../assets/images/guideline1.png')}
           style={styles.image}
-          resizeMode="contain"
+          resizeMode="cover"
         />
       </View>
 
-      {/* Bottom Text and Button Section */}
       <View style={styles.bottomSection}>
         <Text style={styles.titleText}>
           Instantly analyze fresh ingredients, packaged foods, or entire meals using our smart AI lens.
@@ -31,7 +26,7 @@ const GuidelineScreen1 = ({ navigation }) => {
             activeOpacity={0.8}
             onPress={() => navigation.navigate('Guideline2')}
           >
-            <Ionicons name="arrow-forward" size={24} color="#FFFFFF" />
+            <Ionicons name="arrow-forward" size={fs(22)} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
       </View>
@@ -42,43 +37,43 @@ const GuidelineScreen1 = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EBF4EC', // Very light green background matching the image
+    backgroundColor: '#EBF4EC',
   },
   imageWrapper: {
-    height: height * 0.65,
-    width: '100%',
-    borderBottomLeftRadius: 60,
-    borderBottomRightRadius: 60,
+    height: hp(58),
+    width: SCREEN_WIDTH,
+    borderBottomLeftRadius: wp(12),
+    borderBottomRightRadius: wp(12),
     backgroundColor: '#fff',
     overflow: 'hidden',
   },
   image: {
-    width: '100%',
-    height: '100%',
+    width: SCREEN_WIDTH,
+    height: hp(58),
   },
   bottomSection: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 40,
+    paddingHorizontal: wp(6),
+    paddingTop: hp(3.5),
     justifyContent: 'space-between',
-    paddingBottom: 40,
+    paddingBottom: hp(4.5),
   },
   titleText: {
     fontFamily: typography.fonts.extraBold,
-    fontSize: 24, // Adjusted size slightly to match Outfit's scale
+    fontSize: fs(21),
     color: '#000000',
-    lineHeight: 34,
+    lineHeight: fs(21) * 1.5,
     textAlign: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: wp(2),
   },
   buttonContainer: {
     alignItems: 'flex-end',
     width: '100%',
   },
   nextButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: wp(14),
+    height: wp(14),
+    borderRadius: wp(7),
     backgroundColor: '#2ecc71',
     justifyContent: 'center',
     alignItems: 'center',

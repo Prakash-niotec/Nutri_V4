@@ -1,20 +1,19 @@
 import React, { useEffect } from 'react';
 import { View, Image, StyleSheet } from 'react-native';
+import { wp, hp } from '../../utils/responsive';
 
 const SplashScreen = ({ navigation }) => {
   useEffect(() => {
-    // Navigate to GetStarted after 2.5 seconds
     const timer = setTimeout(() => {
       navigation.replace('GetStarted');
     }, 2500);
-
     return () => clearTimeout(timer);
   }, [navigation]);
 
   return (
     <View style={styles.container}>
-      <Image 
-        source={require('../../assets/images/logo.png')} 
+      <Image
+        source={require('../../assets/images/logo.png')}
         style={styles.logo}
         resizeMode="contain"
       />
@@ -25,13 +24,13 @@ const SplashScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8F5E9', // Light green background from design
+    backgroundColor: '#E8F5E9',
     alignItems: 'center',
     justifyContent: 'center',
   },
   logo: {
-    width: 250,
-    height: 250,
+    width: wp(55),
+    height: wp(55),
   },
 });
 
