@@ -6,11 +6,13 @@ import { useAuth } from '../../hooks/useAuth';
 import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 
 const ProfileScreen = ({ navigation }) => {
-  const { userProfile, user, logout } = useAuth();
+  const { userProfile, user, logout, activeProfile } = useAuth();
 
-  const userName = userProfile?.fullName || user?.displayName || userProfile?.userName || 'User Profile';
-  const userEmail = userProfile?.email || user?.email || 'email@example.com';
-  const dietPreference = userProfile?.dietPreference || 'Not Specified';
+  const profileToUse = activeProfile || userProfile;
+
+  const userName = profileToUse?.fullName || profileToUse?.userName || user?.displayName || 'User Profile';
+  const userEmail = profileToUse?.email || user?.email || (activeProfile ? 'Family Member' : 'email@example.com');
+  const dietPreference = profileToUse?.dietPreference || 'Not Specified';
 
   const handleLogout = async () => {
     try {
@@ -42,13 +44,13 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Account Settings</Text>
 
-          <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.rowItem} activeOpacity={0.7} onPress={() => navigation.navigate('MedicalConditions')}>
             <Feather name="heart" size={fs(18)} color="#009933" style={styles.rowIcon} />
             <Text style={styles.rowText}>Medical Conditions & Allergies</Text>
             <Feather name="chevron-right" size={fs(18)} color="#999999" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.rowItem} activeOpacity={0.7} onPress={() => navigation.navigate('FamilyMembers')}>
             <Feather name="users" size={fs(18)} color="#009933" style={styles.rowIcon} />
             <Text style={styles.rowText}>Family Members</Text>
             <Feather name="chevron-right" size={fs(18)} color="#999999" />

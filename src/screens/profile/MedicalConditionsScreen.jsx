@@ -1,22 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, KeyboardAvoidingView, ScrollView, Platform, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { addFamilyMember } from '../../services/firebase/memberService';
+import { updateFamilyMember } from '../../services/firebase/memberService';
+import { updateUserProfile } from '../../services/firebase/userService';
 import { useAuth } from '../../hooks/useAuth';
 import { typography } from '../../utils/typography';
 import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 
 const CONDITIONS = ['Diabetes', 'High Blood Pressure', 'Heart Disease', 'Kidney Disease', 'High Cholesterol'];
 
-export default function AddMemberScreen() {
-    const [fullName, setFullName] = useState('');
-    const [dietPreference, setDietPreference] = useState('');
+export default function MedicalConditionsScreen() {
+    const { userProfile, activeProfile, switchProfile, setUserProfile } = useAuth();
+    const navigation = useNavigation();
+
+    const profileToEdit = activeProfile || userProfile;
+
     const [selectedConditions, setSelectedConditions] = useState([]);
     const [allergies, setAllergies] = useState('');
     const [loading, setLoading] = useState(false);
-    const { user } = useAuth();
-    const navigation = useNavigation();
+
+    useEffect(() => {
+        if (profileToEdit) {
+            if (profileToEdit.medicalConditions) {
+                const conds = profileToEdit.medicalConditions.split(',').map(s => s.trim()).filter(Boolean);
+                setSelectedConditions(conds);
+            }
+            setAllergies(profileToEdit.allergies || '');
+        }
+    }, [profileToEdit]);
 
     const toggleCondition = (condition) => {
         if (selectedConditions.includes(condition)) {
@@ -26,24 +38,33 @@ export default function AddMemberScreen() {
         }
     };
 
-    const handleAddMember = async () => {
-        if (!fullName.trim()) {
-            alert("Please check your inputs", "Member name cannot be empty.");
-            return;
-        }
-
+    const handleSave = async () => {
         setLoading(true);
         try {
-            await addFamilyMember(user.uid, {
-                fullName: fullName.trim(),
-                dietPreference: dietPreference.trim() || 'None',
+            const updates = {
                 medicalConditions: selectedConditions.join(', '),
                 allergies: allergies.trim()
-            });
+            };
+
+            const isMainUser = profileToEdit?.email !== undefined;
+
+            if (isMainUser) {
+                await updateUserProfile(profileToEdit.id, updates);
+
+                const updatedProfile = { ...profileToEdit, ...updates };
+                setUserProfile(updatedProfile);
+                if (!activeProfile || activeProfile.id === profileToEdit.id) {
+                    switchProfile(updatedProfile);
+                }
+            } else {
+                await updateFamilyMember(profileToEdit.id, updates);
+                switchProfile({ ...profileToEdit, ...updates });
+            }
+
             navigation.goBack();
         } catch (error) {
-            console.error("Failed to add member:", error);
-            alert("Error", "Could not add member.");
+            console.error("Failed to save medical info:", error);
+            alert("Error", "Could not save your health information.");
         } finally {
             setLoading(false);
         }
@@ -60,37 +81,17 @@ export default function AddMemberScreen() {
                         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                             <Feather name="arrow-left" size={fs(24)} color="#1A1A1A" />
                         </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Add Family Member</Text>
+                        <Text style={styles.headerTitle}>Medical & Allergies</Text>
                         <View style={styles.dummy} />
                     </View>
 
                     <View style={styles.formContainer}>
                         <View style={styles.iconCircle}>
-                            <Feather name="user-plus" size={fs(32)} color="#009933" />
+                            <Feather name="heart" size={fs(32)} color="#009933" />
                         </View>
-                        <Text style={styles.subtitle}>Create a new profile for your family member.</Text>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Full Name *</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Enter member's name"
-                                placeholderTextColor="#999"
-                                value={fullName}
-                                onChangeText={setFullName}
-                            />
-                        </View>
-
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Diet Preference</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Vegan, Keto, None"
-                                placeholderTextColor="#999"
-                                value={dietPreference}
-                                onChangeText={setDietPreference}
-                            />
-                        </View>
+                        <Text style={styles.subtitle}>
+                            Update health conditions for {profileToEdit?.fullName || profileToEdit?.name || 'this profile'}.
+                        </Text>
 
                         <View style={styles.inputGroup}>
                             <Text style={styles.inputLabel}>Medical Conditions</Text>
@@ -109,28 +110,31 @@ export default function AddMemberScreen() {
                         </View>
 
                         <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Allergies</Text>
+                            <Text style={styles.inputLabel}>Food Allergies</Text>
                             <TextInput
-                                style={styles.input}
-                                placeholder="e.g. Peanuts, Shellfish, Dairy"
+                                style={[styles.input, styles.textArea]}
+                                placeholder="e.g. Peanuts, Shellfish, Dairy, Gluten"
                                 placeholderTextColor="#999"
                                 value={allergies}
                                 onChangeText={setAllergies}
+                                multiline
+                                numberOfLines={3}
+                                textAlignVertical="top"
                             />
                         </View>
                     </View>
                 </ScrollView>
 
                 <TouchableOpacity
-                    style={[styles.submitButton, (!fullName) && styles.submitButtonDisabled]}
-                    onPress={handleAddMember}
+                    style={styles.submitButton}
+                    onPress={handleSave}
                     activeOpacity={0.8}
-                    disabled={!fullName || loading}
+                    disabled={loading}
                 >
                     {loading ? (
                         <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                        <Text style={styles.submitButtonText}>Save Member</Text>
+                        <Text style={styles.submitButtonText}>Save Details</Text>
                     )}
                 </TouchableOpacity>
             </KeyboardAvoidingView>
@@ -177,7 +181,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#EEF5EE',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: hp(2),
+        marginBottom: hp(1.5),
         alignSelf: 'center',
     },
     subtitle: {
@@ -195,7 +199,7 @@ const styles = StyleSheet.create({
         fontFamily: typography.fonts.semiBold,
         fontSize: fs(14),
         color: '#333',
-        marginBottom: hp(1),
+        marginBottom: hp(1.5),
     },
     input: {
         width: '100%',
@@ -209,10 +213,12 @@ const styles = StyleSheet.create({
         fontSize: fs(14),
         color: '#1A1A1A',
     },
+    textArea: {
+        height: hp(12),
+    },
     chipContainer: {
         flexDirection: 'row',
         flexWrap: 'wrap',
-        marginTop: hp(1),
     },
     chip: {
         paddingHorizontal: wp(4),
@@ -251,11 +257,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 8,
         elevation: 5,
-    },
-    submitButtonDisabled: {
-        backgroundColor: '#A8E3B9',
-        shadowOpacity: 0,
-        elevation: 0,
     },
     submitButtonText: {
         fontFamily: typography.fonts.bold,

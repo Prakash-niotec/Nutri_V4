@@ -65,7 +65,7 @@ const HomeScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.scanCard}
               activeOpacity={0.8}
-              onPress={() => navigation?.navigate('Scan')}
+              onPress={() => navigation?.navigate('ScanTab')}
             >
               <View style={styles.scanCardImageBox}>
                 <Image
@@ -80,7 +80,7 @@ const HomeScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.scanCard}
               activeOpacity={0.8}
-              onPress={() => navigation?.navigate('Scan')}
+              onPress={() => navigation?.navigate('ScanTab')}
             >
               <View style={styles.scanCardImageBox}>
                 <Image

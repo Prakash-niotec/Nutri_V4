@@ -13,10 +13,12 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { typography } from '../../utils/typography';
 import { updateUserProfile } from '../../services/firebase/userService';
+import { useAuth } from '../../hooks/useAuth';
 import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 
 const DietPreferenceScreen = ({ navigation, route }) => {
   const { userId, userName, email } = route?.params || {};
+  const { userProfile, setUserProfile } = useAuth();
   const [selectedDiet, setSelectedDiet] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -107,10 +109,12 @@ const DietPreferenceScreen = ({ navigation, route }) => {
               setLoading(true);
               try {
                 if (userId) {
-                  await updateUserProfile(userId, {
+                  const updates = {
                     dietPreference: selectedDiet,
                     updatedAt: new Date().toISOString()
-                  });
+                  };
+                  await updateUserProfile(userId, updates);
+                  setUserProfile({ ...userProfile, ...updates });
                 }
               } catch (error) {
                 console.error('Error saving diet preference:', error);

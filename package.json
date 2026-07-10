@@ -11,10 +11,11 @@
     "@react-navigation/native": "^7.3.3",
     "@react-navigation/stack": "^7.10.5",
     "@shopify/react-native-skia": "2.6.2",
-    "expo": "~56.0.12",
-    "expo-dev-client": "~56.0.20",
+    "expo": "~56.0.15",
+    "expo-camera": "~56.0.8",
+    "expo-dev-client": "~56.0.22",
     "expo-font": "^56.0.7",
-    "expo-splash-screen": "~56.0.10",
+    "expo-splash-screen": "~56.0.12",
     "expo-status-bar": "~56.0.4",
     "firebase": "^12.15.0",
     "react": "19.2.3",
@@ -24,7 +25,6 @@
     "react-native-reanimated": "4.3.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "4.25.2",
-    "react-native-vision-camera": "^5.0.11",
     "react-native-web": "^0.21.2"
   },
   "scripts": {

@@ -15,10 +15,12 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { typography } from '../../utils/typography';
 import { updateUserProfile } from '../../services/firebase/userService';
+import { useAuth } from '../../hooks/useAuth';
 import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 
 const MedicalConditionScreen = ({ navigation, route }) => {
   const { userId, userName, email, dietPreference } = route?.params || {};
+  const { userProfile, setUserProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [conditions, setConditions] = useState({
     diabetes: false,
@@ -196,24 +198,21 @@ const MedicalConditionScreen = ({ navigation, route }) => {
               setLoading(true);
               try {
                 if (userId) {
-                  await updateUserProfile(userId, {
+                  const updates = {
                     medicalConditions: conditions,
                     allergies: selectedAllergies,
                     onboardingCompleted: true,
                     updatedAt: new Date().toISOString()
-                  });
+                  };
+                  await updateUserProfile(userId, updates);
+                  setUserProfile({ ...userProfile, ...updates });
                 }
-                Alert.alert(
-                  "Registration Complete!",
-                  "Your profile and preferences have been saved successfully.",
-                  [{ text: "Continue to Login", onPress: () => navigation.navigate('LoginScreen') }]
-                );
               } catch (error) {
                 console.error("Error completing onboarding:", error);
                 Alert.alert(
                   "Notice",
-                  "Profile preferences recorded locally. Proceeding to login.",
-                  [{ text: "OK", onPress: () => navigation.navigate('LoginScreen') }]
+                  "Profile preferences recorded locally. Proceeding to dashboard.",
+                  [{ text: "OK" }]
                 );
               } finally {
                 setLoading(false);

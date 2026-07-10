@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
 import HomeScreen from '../screens/home/HomeScreen';
 import ScanScreen from '../screens/scanning/ScanScreen';
-import ProfileScreen from '../screens/profile/ProfileScreen';
+import ProfileStackNavigator from './ProfileStackNavigator';
 import { typography } from '../utils/typography';
 import { wp, hp, fs } from '../utils/responsive';
 
@@ -61,7 +61,7 @@ export default function MainNavigator() {
 
       <Tab.Screen
         name="ProfileTab"
-        component={ProfileScreen}
+        component={ProfileStackNavigator}
         options={{
           tabBarLabel: 'Profile',
           tabBarIcon: ({ color }) => (

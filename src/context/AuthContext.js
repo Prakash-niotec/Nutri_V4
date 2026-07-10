@@ -7,6 +7,7 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
+  const [activeProfile, setActiveProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,11 +17,13 @@ export const AuthProvider = ({ children }) => {
         try {
           const profile = await getUserProfile(firebaseUser.uid);
           setUserProfile(profile);
+          setActiveProfile(profile);
         } catch (err) {
           console.error("Failed to fetch user profile in AuthContext:", err);
         }
       } else {
         setUserProfile(null);
+        setActiveProfile(null);
       }
       setLoading(false);
     });
@@ -40,6 +43,15 @@ export const AuthProvider = ({ children }) => {
     await logoutUser();
     setUser(null);
     setUserProfile(null);
+    setActiveProfile(null);
+  };
+
+  const switchProfile = (profile = null) => {
+    if (profile) {
+      setActiveProfile(profile);
+    } else {
+      setActiveProfile(userProfile); // Default to main user
+    }
   };
 
   return (
@@ -47,12 +59,14 @@ export const AuthProvider = ({ children }) => {
       value={{
         user,
         userProfile,
+        activeProfile,
         loading,
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && !!userProfile?.onboardingCompleted,
         login,
         register,
         logout,
-        setUserProfile
+        setUserProfile,
+        switchProfile
       }}
     >
       {children}
