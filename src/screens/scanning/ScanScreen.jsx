@@ -1,14 +1,57 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Platform, ScrollView } from 'react-native';
+import React, { useState, useRef } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { typography } from '../../utils/typography';
 import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
+import { useAuth } from '../../hooks/useAuth';
+import { evaluateFoodSafety } from '../../services/healthEngine';
+import TextRecognition from '@react-native-ml-kit/text-recognition';
+import { MOCK_PRODUCTS } from '../../mocks/healthEngine/mockDetectedFood';
+
+// Adapter to map AuthContext user profile format to Health Engine format
+const mapAuthProfileToHealthProfile = (authProfile) => {
+  if (!authProfile) {
+    return { userId: 'guest', allergies: [], medicalConditions: [], dietaryRestrictions: [] };
+  }
+
+  const mappedAllergies = (authProfile.allergies || []).map(a => a.toLowerCase().replace(' ', '_'));
+
+  const mappedConditions = [];
+  if (typeof authProfile.medicalConditions === 'object' && authProfile.medicalConditions !== null) {
+    if (authProfile.medicalConditions.diabetes) mappedConditions.push('diabetes');
+    if (authProfile.medicalConditions.highBloodPressure) mappedConditions.push('high_blood_pressure');
+    if (authProfile.medicalConditions.heartDisease) mappedConditions.push('heart_disease');
+    if (authProfile.medicalConditions.kidneyDisease) mappedConditions.push('kidney_disease');
+    if (authProfile.medicalConditions.highCholesterol) mappedConditions.push('high_cholesterol');
+  } else if (typeof authProfile.medicalConditions === 'string') {
+    const conds = authProfile.medicalConditions.split(',').map(s => s.trim().toLowerCase());
+    if (conds.includes('diabetes')) mappedConditions.push('diabetes');
+    if (conds.includes('high blood pressure')) mappedConditions.push('high_blood_pressure');
+    if (conds.includes('heart disease')) mappedConditions.push('heart_disease');
+    if (conds.includes('kidney disease')) mappedConditions.push('kidney_disease');
+    if (conds.includes('high cholesterol')) mappedConditions.push('high_cholesterol');
+  }
+
+  const dietaryRestrictions = authProfile.dietPreference ? [authProfile.dietPreference.toLowerCase()] : [];
+
+  return {
+    userId: authProfile.id || 'current_user',
+    allergies: mappedAllergies,
+    medicalConditions: mappedConditions,
+    dietaryRestrictions: dietaryRestrictions,
+    ageGroup: 'adult'
+  };
+};
 
 const ScanScreen = ({ navigation }) => {
   const [permission, requestPermission] = useCameraPermissions();
   const [isCameraActive, setIsCameraActive] = useState(false);
-  const [extractedText, setExtractedText] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const cameraRef = useRef(null);
+  const { activeProfile } = useAuth();
 
   const startScanning = async () => {
     if (!permission?.granted) {
@@ -18,34 +61,159 @@ const ScanScreen = ({ navigation }) => {
         return;
       }
     }
-    setExtractedText('');
+    setResult(null);
     setIsCameraActive(true);
   };
 
-  const handleBarcodeScanned = ({ type, data }) => {
-    setIsCameraActive(false);
-    setExtractedText(`Scanned Data:\n${data}`);
+  const captureAndAnalyze = async () => {
+    if (!cameraRef.current) return;
+
+    try {
+      // 1. Take a picture (simulate alignment)
+      const photo = await cameraRef.current.takePictureAsync();
+
+      setIsAnalyzing(true);
+
+      try {
+        const textResult = await TextRecognition.recognize(photo.uri);
+        const rawText = textResult.text.toLowerCase();
+
+        const ingredients = rawText
+          .split(/[\n,;.\-]+/)
+          .map(i => i.trim())
+          .filter(i => i.length > 2); // filtering out noise 
+
+        const extractQuantity = (text, keyword) => {
+          const regex = new RegExp(`${keyword}\\s*[:\\-]?\\s*(\\d+(?:\\.\\d+)?)\\s*(g|mg|kcal|cal)?`, 'i');
+          const match = text.match(regex);
+          return match ? parseFloat(match[1]) : undefined;
+        };
+
+        const nutritionFacts = {
+          calories: extractQuantity(rawText, 'calories') || extractQuantity(rawText, 'energy'),
+          sugar_g: extractQuantity(rawText, 'sugar'),
+          sodium_mg: extractQuantity(rawText, 'sodium'),
+          saturatedFat_g: extractQuantity(rawText, 'saturated fat'),
+          totalCarbs_g: extractQuantity(rawText, 'carbohydrate') || extractQuantity(rawText, 'carbs'),
+          protein_g: extractQuantity(rawText, 'protein')
+        };
+
+        const scannedFood = {
+          productName: 'Scanned Packet',
+          detectedIngredients: ingredients,
+          nutritionFacts
+        };
+
+        const healthProfile = mapAuthProfileToHealthProfile(activeProfile);
+        const evaluation = evaluateFoodSafety(scannedFood, healthProfile);
+
+        setIsAnalyzing(false);
+        setIsCameraActive(false);
+        setResult({ food: scannedFood, evaluation });
+      } catch (ocrError) {
+        console.error("OCR Extraction Error:", ocrError);
+        alert("OCR Failed. Ensure @react-native-ml-kit/text-recognition is built correctly into the native client.");
+        setIsAnalyzing(false);
+        setIsCameraActive(false);
+      }
+
+    } catch (err) {
+      console.error(err);
+      setIsAnalyzing(false);
+      setIsCameraActive(false);
+    }
   };
 
   const resetScanner = () => {
-    setExtractedText('');
+    setResult(null);
     setIsCameraActive(false);
   };
 
-  if (extractedText) {
+  if (result) {
+    const verdictColor =
+      result.evaluation.overallVerdict === 'SAFE' ? '#2ECC71' :
+        result.evaluation.overallVerdict === 'CAUTION' ? '#F39C12' : '#E74C3C';
+
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.resultContainer}>
-          <Text style={styles.title}>Scan Result</Text>
+          <Text style={styles.title}>Packet Analysis</Text>
           <View style={styles.card}>
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-              <Text style={styles.resultText}>{extractedText}</Text>
+            <View style={[styles.verdictHeader, { backgroundColor: verdictColor }]}>
+              <Text style={styles.verdictText}>{result.evaluation.overallVerdict}</Text>
+            </View>
+            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+              <Text style={styles.productName}>{result.food.productName || 'Unknown Product'}</Text>
+              <Text style={styles.summaryText}>{result.evaluation.summary}</Text>
+
+              <View style={styles.riskRow}>
+                <Text style={styles.riskScoreLabel}>Calculated Risk Score:</Text>
+                <Text style={[styles.riskScoreValue, { color: verdictColor }]}>{result.evaluation.riskScore}/100</Text>
+              </View>
+
+              {/* Macro Quantities Section */}
+              {Object.values(result.food.nutritionFacts).some(v => v !== undefined) && (
+                <View style={styles.macrosSection}>
+                  <Text style={styles.flagsSectionTitle}>Extracted Nutrition Facts</Text>
+
+                  <View style={styles.macrosGrid}>
+                    {result.food.nutritionFacts.calories !== undefined && (
+                      <View style={styles.macroBadge}>
+                        <Text style={styles.macroLabel}>Calories</Text>
+                        <Text style={styles.macroValue}>{result.food.nutritionFacts.calories} kcal</Text>
+                      </View>
+                    )}
+                    {result.food.nutritionFacts.sugar_g !== undefined && (
+                      <View style={styles.macroBadge}>
+                        <Text style={styles.macroLabel}>Sugar</Text>
+                        <Text style={styles.macroValue}>{result.food.nutritionFacts.sugar_g}g</Text>
+                      </View>
+                    )}
+                    {result.food.nutritionFacts.sodium_mg !== undefined && (
+                      <View style={styles.macroBadge}>
+                        <Text style={styles.macroLabel}>Sodium</Text>
+                        <Text style={styles.macroValue}>{result.food.nutritionFacts.sodium_mg}mg</Text>
+                      </View>
+                    )}
+                    {result.food.nutritionFacts.protein_g !== undefined && (
+                      <View style={styles.macroBadge}>
+                        <Text style={styles.macroLabel}>Protein</Text>
+                        <Text style={styles.macroValue}>{result.food.nutritionFacts.protein_g}g</Text>
+                      </View>
+                    )}
+                    {result.food.nutritionFacts.totalCarbs_g !== undefined && (
+                      <View style={styles.macroBadge}>
+                        <Text style={styles.macroLabel}>Carbs</Text>
+                        <Text style={styles.macroValue}>{result.food.nutritionFacts.totalCarbs_g}g</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              )}
+
+              {result.evaluation.flaggedIngredients.length > 0 && (
+                <View style={styles.flagsSection}>
+                  <Text style={styles.flagsSectionTitle}>Flagged Matches</Text>
+                  {result.evaluation.flaggedIngredients.map((flag, idx) => (
+                    <View key={idx} style={styles.flagItem}>
+                      <View style={[styles.severityDot, {
+                        backgroundColor: flag.severity === 'CRITICAL' ? '#E74C3C' : flag.severity === 'HIGH' ? '#D35400' : '#E67E22'
+                      }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.flagIngredient}>{flag.ingredient} <Text style={styles.flagSeverity}>({flag.severity})</Text></Text>
+                        <Text style={styles.flagReason}>{flag.reason}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
             </ScrollView>
           </View>
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.actionButton} onPress={resetScanner} activeOpacity={0.8}>
               <Feather name="refresh-cw" size={fs(18)} color="#FFFFFF" style={{ marginRight: wp(2) }} />
-              <Text style={styles.actionButtonText}>Scan Again</Text>
+              <Text style={styles.actionButtonText}>Scan Another Label</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -57,21 +225,34 @@ const ScanScreen = ({ navigation }) => {
     return (
       <View style={styles.cameraContainer}>
         <CameraView
+          ref={cameraRef}
           style={styles.camera}
           facing="back"
-          onBarcodeScanned={handleBarcodeScanned}
-          barcodeScannerSettings={{
-            barcodeTypes: ["qr", "ean13", "ean8", "upc_a", "upc_e", "code128"],
-          }}
         >
           <View style={styles.cameraOverlay}>
-            <Text style={{ color: 'white', marginBottom: hp(2), fontFamily: typography.fonts.semiBold }}>Point at QR or Barcode</Text>
-            <View style={styles.scanFrame} />
+            <Text style={{ color: 'white', marginBottom: hp(2), fontFamily: typography.fonts.semiBold, textAlign: 'center' }}>
+              Align ingredients label within the frame
+            </Text>
+            <View style={styles.scanLabelFrame} />
           </View>
+
           <View style={styles.controls}>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setIsCameraActive(false)}>
-              <Feather name="x" size={fs(28)} color="#FFFFFF" />
-            </TouchableOpacity>
+            {isAnalyzing ? (
+              <View style={styles.analyzingWrapper}>
+                <ActivityIndicator size="large" color="#009933" />
+                <Text style={styles.analyzingText}>Extracting Ingredients...</Text>
+              </View>
+            ) : (
+              <>
+                <View style={{ width: wp(12) }} />
+                <TouchableOpacity style={styles.captureBtn} onPress={captureAndAnalyze}>
+                  <View style={styles.captureBtnInner} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.closeBtn} onPress={() => setIsCameraActive(false)}>
+                  <Feather name="x" size={fs(28)} color="#FFFFFF" />
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </CameraView>
       </View>
@@ -82,11 +263,11 @@ const ScanScreen = ({ navigation }) => {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <View style={styles.iconCircle}>
-          <Feather name="camera" size={fs(44)} color="#009933" />
+          <Feather name="file-text" size={fs(44)} color="#009933" />
         </View>
-        <Text style={styles.title}>Food & Label Scanner</Text>
+        <Text style={styles.title}>Packet Health Scanner</Text>
         <Text style={styles.subtitle}>
-          Position your produce or nutrition label within the camera frame to analyze ingredients and health guidelines.
+          Use the camera to scan the ingredients label on any packet. Our AI will instantly warn you if it conflicts with your allergies or medical conditions.
         </Text>
 
         <TouchableOpacity
@@ -94,8 +275,8 @@ const ScanScreen = ({ navigation }) => {
           activeOpacity={0.8}
           onPress={startScanning}
         >
-          <Feather name="maximize" size={fs(18)} color="#FFFFFF" style={{ marginRight: wp(2) }} />
-          <Text style={styles.actionButtonText}>Start Scanning</Text>
+          <Feather name="camera" size={fs(18)} color="#FFFFFF" style={{ marginRight: wp(2) }} />
+          <Text style={styles.actionButtonText}>Scan Ingredients Label</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -113,18 +294,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: wp(8),
     paddingTop: Platform.OS === 'android' ? STATUS_BAR_HEIGHT : 0,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: wp(8),
-  },
-  loadingText: {
-    fontFamily: typography.fonts.semiBold,
-    fontSize: fs(16),
-    color: '#009933',
-    marginTop: hp(2),
   },
   iconCircle: {
     width: wp(25),
@@ -182,11 +351,11 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: wp(10),
+    paddingHorizontal: wp(6),
   },
-  scanFrame: {
+  scanLabelFrame: {
     width: '100%',
-    aspectRatio: 3 / 4,
+    aspectRatio: 4 / 3,
     borderWidth: 2,
     borderColor: '#009933',
     borderRadius: wp(4),
@@ -199,16 +368,23 @@ const styles = StyleSheet.create({
     paddingBottom: hp(5),
     paddingTop: hp(2),
     backgroundColor: 'rgba(0,0,0,0.5)',
+    height: hp(18),
   },
   captureBtn: {
     width: wp(20),
     height: wp(20),
     borderRadius: wp(10),
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 4,
-    borderColor: '#009933',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  captureBtnInner: {
+    width: wp(16),
+    height: wp(16),
+    borderRadius: wp(8),
+    backgroundColor: '#FFFFFF',
   },
   closeBtn: {
     width: wp(12),
@@ -217,6 +393,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  analyzingWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  analyzingText: {
+    color: '#FFFFFF',
+    fontFamily: typography.fonts.semiBold,
+    marginTop: hp(1)
   },
   resultContainer: {
     flex: 1,
@@ -231,24 +416,128 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: wp(4),
     marginBottom: hp(3),
-    padding: wp(4),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+    overflow: 'hidden'
+  },
+  verdictHeader: {
+    paddingVertical: hp(2),
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  verdictText: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(24),
+    color: '#FFF',
+    letterSpacing: 2
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
+    padding: wp(4),
     paddingBottom: hp(2),
   },
-  resultText: {
-    fontFamily: typography.fonts.regular,
+  productName: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(18),
+    color: '#212121',
+    marginBottom: hp(1),
+  },
+  summaryText: {
+    fontFamily: typography.fonts.semiBold,
     fontSize: fs(14),
-    color: '#333333',
-    lineHeight: fs(14) * 1.5,
+    color: '#555',
+    marginBottom: hp(2),
+  },
+  riskRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: hp(1.5),
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#EEE',
+    marginBottom: hp(2),
+  },
+  riskScoreLabel: {
+    fontFamily: typography.fonts.medium,
+    fontSize: fs(14),
+    color: '#333',
+  },
+  riskScoreValue: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(14),
+  },
+  flagsSection: {
+    marginTop: hp(1),
+  },
+  flagsSectionTitle: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(16),
+    color: '#1A1A1A',
+    marginBottom: hp(1.5),
+  },
+  flagItem: {
+    flexDirection: 'row',
+    marginBottom: hp(1.5),
+    backgroundColor: '#F9F9F9',
+    padding: wp(3),
+    borderRadius: wp(2),
+  },
+  severityDot: {
+    width: wp(3),
+    height: wp(3),
+    borderRadius: wp(1.5),
+    marginTop: hp(0.6),
+    marginRight: wp(3),
+  },
+  flagIngredient: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(14),
+    color: '#333',
+    marginBottom: hp(0.2),
+  },
+  flagSeverity: {
+    fontFamily: typography.fonts.regular,
+    fontSize: fs(12),
+    color: '#666',
+  },
+  flagReason: {
+    fontFamily: typography.fonts.regular,
+    fontSize: fs(12),
+    color: '#555',
+  },
+  macrosSection: {
+    marginTop: hp(1),
+    marginBottom: hp(2),
+  },
+  macrosGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: wp(3),
+    marginTop: hp(1),
+  },
+  macroBadge: {
+    backgroundColor: '#E6F4FE',
+    paddingVertical: hp(1),
+    paddingHorizontal: wp(3),
+    borderRadius: wp(2),
+    alignItems: 'center',
+    minWidth: wp(18),
+  },
+  macroLabel: {
+    fontFamily: typography.fonts.medium,
+    fontSize: fs(12),
+    color: '#0066CC',
+    marginBottom: hp(0.5),
+  },
+  macroValue: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(14),
+    color: '#004C99',
   },
   actionRow: {
     flexDirection: 'row',
