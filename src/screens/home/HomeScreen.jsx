@@ -3,13 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Image,
   Platform,
-  StatusBar,
+  StatusBar
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { typography } from '../../utils/typography';
 import { colors } from '../../utils/colors';
@@ -17,10 +17,16 @@ import { useAuth } from '../../hooks/useAuth';
 import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 
 const HomeScreen = ({ navigation }) => {
-  const { userProfile, user } = useAuth();
+  const { userProfile, user, activeProfile } = useAuth();
 
-  const userName = userProfile?.fullName || user?.displayName || userProfile?.userName || 'Jessica';
-  const firstName = userName.split(' ')[0];
+  // Explicitly fallback strictly on activeProfile first, then main profile. 
+  // Covers edge cases of missing properties or mocked data.
+  const nameSource = activeProfile?.fullName || activeProfile?.name || activeProfile?.userName ||
+    userProfile?.fullName || userProfile?.name ||
+    user?.displayName || 'User';
+
+  const firstName = nameSource.split(' ')[0];
+  const isFamilyMember = activeProfile && activeProfile.id !== userProfile?.id;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -56,7 +62,9 @@ const HomeScreen = ({ navigation }) => {
             </View>
             <View style={styles.greetingTextContainer}>
               <Text style={styles.greetingTitle}>Hi, {firstName}!</Text>
-              <Text style={styles.greetingSubtitle}>Track your nutrition today!</Text>
+              <Text style={styles.greetingSubtitle}>
+                {isFamilyMember ? 'Scanning for family member' : 'Track your nutrition today!'}
+              </Text>
             </View>
           </View>
 

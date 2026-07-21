@@ -1,5 +1,14 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Platform, ScrollView, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  ScrollView,
+  ActivityIndicator
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { typography } from '../../utils/typography';
@@ -7,7 +16,6 @@ import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 import { useAuth } from '../../hooks/useAuth';
 import { evaluateFoodSafety } from '../../services/healthEngine';
 import TextRecognition from '@react-native-ml-kit/text-recognition';
-import { MOCK_PRODUCTS } from '../../mocks/healthEngine/mockDetectedFood';
 
 // Adapter to map AuthContext user profile format to Health Engine format
 const mapAuthProfileToHealthProfile = (authProfile) => {
@@ -52,6 +60,12 @@ const ScanScreen = ({ navigation }) => {
 
   const cameraRef = useRef(null);
   const { activeProfile } = useAuth();
+
+  React.useEffect(() => {
+    navigation.setOptions({
+      tabBarStyle: isCameraActive ? { display: 'none' } : undefined,
+    });
+  }, [isCameraActive, navigation]);
 
   const startScanning = async () => {
     if (!permission?.granted) {
@@ -133,30 +147,57 @@ const ScanScreen = ({ navigation }) => {
     const verdictColor =
       result.evaluation.overallVerdict === 'SAFE' ? '#2ECC71' :
         result.evaluation.overallVerdict === 'CAUTION' ? '#F39C12' : '#E74C3C';
+    const verdictIcon =
+      result.evaluation.overallVerdict === 'SAFE' ? 'check-circle' :
+        result.evaluation.overallVerdict === 'CAUTION' ? 'alert-triangle' : 'x-octagon';
 
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.resultContainer}>
-          <Text style={styles.title}>Packet Analysis</Text>
+          <Text style={styles.title}>Analysis Complete</Text>
           <View style={styles.card}>
             <View style={[styles.verdictHeader, { backgroundColor: verdictColor }]}>
+              <Feather name={verdictIcon} size={fs(36)} color="#FFF" style={{ marginBottom: hp(1) }} />
               <Text style={styles.verdictText}>{result.evaluation.overallVerdict}</Text>
             </View>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-              <Text style={styles.productName}>{result.food.productName || 'Unknown Product'}</Text>
-              <Text style={styles.summaryText}>{result.evaluation.summary}</Text>
+              <Text style={styles.productName}>{result.food.productName || 'Scanned Label'}</Text>
+
+              <View style={styles.summaryContainer}>
+                <Text style={styles.summaryText}>{result.evaluation.summary}</Text>
+              </View>
 
               <View style={styles.riskRow}>
-                <Text style={styles.riskScoreLabel}>Calculated Risk Score:</Text>
-                <Text style={[styles.riskScoreValue, { color: verdictColor }]}>{result.evaluation.riskScore}/100</Text>
+                <Text style={styles.riskScoreLabel}>Calculated Risk Score</Text>
+                <View style={[styles.riskScoreBadge, { backgroundColor: verdictColor + '20' }]}>
+                  <Text style={[styles.riskScoreValue, { color: verdictColor }]}>{result.evaluation.riskScore}/100</Text>
+                </View>
               </View>
+
+              {result.evaluation.flaggedIngredients.length > 0 && (
+                <View style={styles.flagsSection}>
+                  <Text style={styles.flagsSectionTitle}>Flagged Interactions</Text>
+                  {result.evaluation.flaggedIngredients.map((flag, idx) => (
+                    <View key={idx} style={[styles.flagItem, { borderLeftColor: flag.severity === 'CRITICAL' ? '#E74C3C' : flag.severity === 'HIGH' ? '#D35400' : '#E67E22', borderLeftWidth: 4 }]}>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.flagHeaderRow}>
+                          <Text style={styles.flagIngredient}>{flag.ingredient.charAt(0).toUpperCase() + flag.ingredient.slice(1)}</Text>
+                          <View style={[styles.severityPill, { backgroundColor: flag.severity === 'CRITICAL' ? '#E74C3C15' : '#E67E2215' }]}>
+                            <Text style={[styles.flagSeverity, { color: flag.severity === 'CRITICAL' ? '#E74C3C' : '#D35400' }]}>{flag.severity}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.flagReason}>{flag.reason}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
 
               {/* Macro Quantities Section */}
               {Object.values(result.food.nutritionFacts).some(v => v !== undefined) && (
                 <View style={styles.macrosSection}>
                   <Text style={styles.flagsSectionTitle}>Extracted Nutrition Facts</Text>
-
                   <View style={styles.macrosGrid}>
                     {result.food.nutritionFacts.calories !== undefined && (
                       <View style={styles.macroBadge}>
@@ -189,23 +230,6 @@ const ScanScreen = ({ navigation }) => {
                       </View>
                     )}
                   </View>
-                </View>
-              )}
-
-              {result.evaluation.flaggedIngredients.length > 0 && (
-                <View style={styles.flagsSection}>
-                  <Text style={styles.flagsSectionTitle}>Flagged Matches</Text>
-                  {result.evaluation.flaggedIngredients.map((flag, idx) => (
-                    <View key={idx} style={styles.flagItem}>
-                      <View style={[styles.severityDot, {
-                        backgroundColor: flag.severity === 'CRITICAL' ? '#E74C3C' : flag.severity === 'HIGH' ? '#D35400' : '#E67E22'
-                      }]} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.flagIngredient}>{flag.ingredient} <Text style={styles.flagSeverity}>({flag.severity})</Text></Text>
-                        <Text style={styles.flagReason}>{flag.reason}</Text>
-                      </View>
-                    </View>
-                  ))}
                 </View>
               )}
             </ScrollView>
@@ -447,29 +471,43 @@ const styles = StyleSheet.create({
     color: '#212121',
     marginBottom: hp(1),
   },
+  summaryContainer: {
+    backgroundColor: '#F8F9FA',
+    padding: wp(4),
+    borderRadius: wp(3),
+    marginBottom: hp(2),
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
+  },
   summaryText: {
     fontFamily: typography.fonts.semiBold,
     fontSize: fs(14),
-    color: '#555',
-    marginBottom: hp(2),
+    color: '#444444',
+    lineHeight: fs(14) * 1.5,
   },
   riskRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: hp(1.5),
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#EEE',
-    marginBottom: hp(2),
+    marginBottom: hp(2.5),
   },
   riskScoreLabel: {
-    fontFamily: typography.fonts.medium,
-    fontSize: fs(14),
-    color: '#333',
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(15),
+    color: '#1A1A1A',
+  },
+  riskScoreBadge: {
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(0.5),
+    borderRadius: wp(2),
   },
   riskScoreValue: {
     fontFamily: typography.fonts.bold,
-    fontSize: fs(14),
+    fontSize: fs(15),
   },
   flagsSection: {
     marginTop: hp(1),
@@ -483,32 +521,43 @@ const styles = StyleSheet.create({
   flagItem: {
     flexDirection: 'row',
     marginBottom: hp(1.5),
-    backgroundColor: '#F9F9F9',
-    padding: wp(3),
-    borderRadius: wp(2),
+    backgroundColor: '#FDFDFD',
+    padding: wp(3.5),
+    borderRadius: wp(2.5),
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.02,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  severityDot: {
-    width: wp(3),
-    height: wp(3),
-    borderRadius: wp(1.5),
-    marginTop: hp(0.6),
-    marginRight: wp(3),
+  flagHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: hp(0.8),
   },
   flagIngredient: {
     fontFamily: typography.fonts.bold,
-    fontSize: fs(14),
-    color: '#333',
-    marginBottom: hp(0.2),
+    fontSize: fs(15),
+    color: '#212121',
+  },
+  severityPill: {
+    paddingHorizontal: wp(2.5),
+    paddingVertical: hp(0.4),
+    borderRadius: wp(4),
   },
   flagSeverity: {
-    fontFamily: typography.fonts.regular,
-    fontSize: fs(12),
-    color: '#666',
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(10),
+    letterSpacing: 0.5,
   },
   flagReason: {
     fontFamily: typography.fonts.regular,
-    fontSize: fs(12),
-    color: '#555',
+    fontSize: fs(13),
+    color: '#555555',
+    lineHeight: fs(13) * 1.5,
   },
   macrosSection: {
     marginTop: hp(1),

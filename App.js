@@ -1,18 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, Text } from 'react-native';
+import { View, Text, LogBox } from 'react-native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
 import * as SplashScreen from 'expo-splash-screen';
-import { 
-  useFonts, 
+import {
+  useFonts,
   Outfit_400Regular,
   Outfit_500Medium,
   Outfit_600SemiBold,
   Outfit_700Bold,
   Outfit_800ExtraBold,
-  Outfit_900Black 
+  Outfit_900Black
 } from '@expo-google-fonts/outfit';
+
+// Ignore React Native internal deprecation warnings caused by third party libraries
+LogBox.ignoreLogs(['InteractionManager has been deprecated']);
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync();

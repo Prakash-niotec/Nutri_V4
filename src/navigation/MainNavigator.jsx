@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import HomeScreen from '../screens/home/HomeScreen';
 import ScanScreen from '../screens/scanning/ScanScreen';
@@ -62,11 +63,18 @@ export default function MainNavigator() {
       <Tab.Screen
         name="ProfileTab"
         component={ProfileStackNavigator}
-        options={{
-          tabBarLabel: 'Profile',
-          tabBarIcon: ({ color }) => (
-            <Feather name="user" size={fs(22)} color={color} />
-          ),
+        options={({ route }) => {
+          const routeName = getFocusedRouteNameFromRoute(route) ?? 'ProfileMain';
+          const hiddenRoutes = ['MedicalConditions', 'FamilyMembers', 'AddMember'];
+          const isHidden = hiddenRoutes.includes(routeName);
+
+          return {
+            tabBarLabel: 'Profile',
+            tabBarIcon: ({ color }) => (
+              <Feather name="user" size={fs(22)} color={color} />
+            ),
+            tabBarStyle: isHidden ? { display: 'none' } : styles.tabBar,
+          };
         }}
       />
     </Tab.Navigator>

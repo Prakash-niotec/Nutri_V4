@@ -36,7 +36,7 @@ const GetStartedScreen = ({ navigation }) => {
           />
           <Button
             title="Log In"
-            onPress={() => navigation.navigate('Login')}
+            onPress={() => navigation.navigate('LoginScreen')}
             variant="outline"
           />
         </View>
