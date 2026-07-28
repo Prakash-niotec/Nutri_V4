@@ -200,7 +200,12 @@ export function fuseOcrResults(results: TextRecognitionResult[]): FusedNutrition
     return match ? match.numericValue : undefined;
   };
 
-  const facts: NutritionFacts = {
+  const bestMetadata = parsedTables.find(t => t.metadata && (t.metadata.servingSize || t.metadata.servingsPerPack))?.metadata || parsedTables[0]?.metadata;
+
+  const per100gItems = finalDynamicItems.filter(i => i.columnType === 'per100g' || !i.columnType);
+  const perServingItems = finalDynamicItems.filter(i => i.columnType === 'perServing');
+
+  const facts: NutritionFacts & { metadata?: any; per100gItems?: any[]; perServingItems?: any[] } = {
     calories: getCatVal("calories"),
     sugar: getCatVal("sugar"),
     sodium: getCatVal("sodium"),
@@ -209,6 +214,9 @@ export function fuseOcrResults(results: TextRecognitionResult[]): FusedNutrition
     unit: finalUnit,
     tableItems: finalTableItems,
     dynamicItems: finalDynamicItems,
+    per100gItems,
+    perServingItems,
+    metadata: bestMetadata,
     rawIngredients: bestIngredients,
   };
 

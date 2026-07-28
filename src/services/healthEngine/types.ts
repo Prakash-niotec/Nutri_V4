@@ -1,7 +1,24 @@
+export interface ProductMetadata {
+    servingSize?: string;
+    servingsPerPack?: string;
+    netWeight?: string;
+}
+
+export interface NutrientDisplayItem {
+    label: string;
+    value: number;
+    unit: string;
+    columnType?: 'per100g' | 'perServing' | 'unknown';
+}
+
 export interface DetectedFoodData {
     productName?: string;
     detectedIngredients: string[];
     detectedAllergenTags?: string[];
+    metadata?: ProductMetadata;
+    per100gItems?: NutrientDisplayItem[];
+    perServingItems?: NutrientDisplayItem[];
+    allNutrientItems?: NutrientDisplayItem[];
     nutritionFacts?: {
         servingSize?: string;
         calories?: number;

@@ -97,7 +97,14 @@ export interface DynamicNutrientItem {
   unit: string | null;
   rawValueStr: string;
   columnHeader?: string;
+  columnType?: "per100g" | "perServing" | "unknown";
   normalizedKey?: NutrientCategory;
+}
+
+export interface TableMetadata {
+  servingSize?: string;
+  servingsPerPack?: string;
+  netWeight?: string;
 }
 
 export interface ParsedNutritionTable {
@@ -106,6 +113,7 @@ export interface ParsedNutritionTable {
   rawIngredients: string[];
   unit: "per100g" | "perServing" | "unknown";
   facts: NutritionFacts;
+  metadata?: TableMetadata;
   rows: SpatialRow[];
 }
 
@@ -147,22 +155,22 @@ export const CANONICAL_KEYS: CanonicalKeyDef[] = [
   {
     canonicalName: "Energy",
     category: "calories",
-    aliases: ["energy", "ehergy", "enery", "enegy", "energi", "kcal", "kj"],
+    aliases: ["energy", "ehergy", "enery", "enegy", "energi", "calories", "kcal", "kj", "energy value", "calories from fat"],
   },
   {
     canonicalName: "Total Carbohydrates",
     category: "carbohydrates",
-    aliases: ["total carbohydrate", "total carbohydrates", "tota carbohyarate", "carbohyarate", "carbohydrat", "carbs"],
+    aliases: ["total carbohydrate", "total carbohydrates", "tota carbohyarate", "carbohyarate", "carbohydrat", "carbohydrates", "carbs", "glucides"],
   },
   {
     canonicalName: "Added Sugar",
     category: "sugar",
-    aliases: ["added sugar", "added sugars", "of which added sugars", "includes added sugars"],
+    aliases: ["added sugar", "added sugars", "of which added sugars", "includes added sugars", "added"],
   },
   {
     canonicalName: "Total Sugar",
     category: "sugar",
-    aliases: ["total sugar", "total sugars", "tota suga", "tota sugar", "sugars", "naturaly accuing"],
+    aliases: ["total sugar", "total sugars", "tota suga", "tota sugar", "sugars", "naturaly accuing", "naturally occurring sugar", "sucre", "azucares"],
   },
   {
     canonicalName: "Total Milk Fat",
@@ -172,32 +180,52 @@ export const CANONICAL_KEYS: CanonicalKeyDef[] = [
   {
     canonicalName: "Saturated Fat",
     category: "saturatedFat",
-    aliases: ["saturated fat", "saturated fatty acids", "saturated taty acits", "saturated fatty", "sat fat", "saturates"],
-  },
-  {
-    canonicalName: "Sodium",
-    category: "sodium",
-    aliases: ["sodium", "sodium n", "sodium (na)", "salt"],
-  },
-  {
-    canonicalName: "Protein",
-    category: "protein",
-    aliases: ["protein", "proteines", "proteina"],
-  },
-  {
-    canonicalName: "Total Fat",
-    category: "totalFat",
-    aliases: ["total fat", "tota fat", "fat"],
-  },
-  {
-    canonicalName: "Dietary Fiber",
-    category: "fiber",
-    aliases: ["dietary fiber", "fiber", "fibres", "fibra"],
+    aliases: ["saturated fat", "saturated fatty acids", "saturated taty acits", "saturated fatty", "sat fat", "sat. fat", "saturates", "acides gras satures"],
   },
   {
     canonicalName: "Trans Fat",
     category: "transFat",
-    aliases: ["trans fat", "trans fatty acids", "trans fatty", "trans-fat"],
+    aliases: ["trans fat", "trans fatty acids", "trans fatty", "trans-fat", "transfat"],
+  },
+  {
+    canonicalName: "Monounsaturated Fat",
+    category: "totalFat",
+    aliases: ["monounsaturated fat", "monounsaturated fatty acids", "monounsaturates", "mono-unsaturated fat"],
+  },
+  {
+    canonicalName: "Polyunsaturated Fat",
+    category: "totalFat",
+    aliases: ["polyunsaturated fat", "polyunsaturated fatty acids", "polyunsaturates", "poly-unsaturated fat"],
+  },
+  {
+    canonicalName: "Total Fat",
+    category: "totalFat",
+    aliases: ["total fat", "tota fat", "fat", "lipides", "grasas", "fat/lipides"],
+  },
+  {
+    canonicalName: "Cholesterol",
+    category: "other",
+    aliases: ["cholesterol", "cholesterin", "cholestrol"],
+  },
+  {
+    canonicalName: "Sodium",
+    category: "sodium",
+    aliases: ["sodium", "sodium n", "sodium (na)", "salt", "sal", "sel", "na"],
+  },
+  {
+    canonicalName: "Protein",
+    category: "protein",
+    aliases: ["protein", "proteines", "proteina", "proteins"],
+  },
+  {
+    canonicalName: "Dietary Fiber",
+    category: "fiber",
+    aliases: ["dietary fiber", "dietary fibre", "fiber", "fibres", "fibra", "fibre"],
+  },
+  {
+    canonicalName: "Polyols / Sugar Alcohols",
+    category: "other",
+    aliases: ["polyols", "sugar alcohol", "sugar alcohols", "polyols (sugar alcohols)"],
   },
   {
     canonicalName: "Calcium",
@@ -205,9 +233,59 @@ export const CANONICAL_KEYS: CanonicalKeyDef[] = [
     aliases: ["calcium", "calcium (ca)", "ca"],
   },
   {
+    canonicalName: "Iron",
+    category: "minerals",
+    aliases: ["iron", "iron (fe)", "fe", "ferrum"],
+  },
+  {
+    canonicalName: "Potassium",
+    category: "minerals",
+    aliases: ["potassium", "potassium (k)", "k"],
+  },
+  {
+    canonicalName: "Magnesium",
+    category: "minerals",
+    aliases: ["magnesium", "magnesium (mg)", "mg"],
+  },
+  {
+    canonicalName: "Zinc",
+    category: "minerals",
+    aliases: ["zinc", "zinc (zn)", "zn"],
+  },
+  {
     canonicalName: "Minerals",
     category: "minerals",
     aliases: ["minerals", "ash", "mineral"],
+  },
+  {
+    canonicalName: "Vitamin A",
+    category: "other",
+    aliases: ["vitamin a", "vit a", "retinol"],
+  },
+  {
+    canonicalName: "Vitamin C",
+    category: "other",
+    aliases: ["vitamin c", "vit c", "ascorbic acid"],
+  },
+  {
+    canonicalName: "Vitamin D",
+    category: "other",
+    aliases: ["vitamin d", "vit d", "vitamin d3", "cholecalciferol"],
+  },
+  {
+    canonicalName: "Vitamin E",
+    category: "other",
+    aliases: ["vitamin e", "vit e", "tocopherol"],
+  },
+  {
+    canonicalName: "Vitamin B12",
+    category: "other",
+    aliases: ["vitamin b12", "vit b12", "cyanocobalamin"],
+  },
+  {
+    canonicalName: "Vitamin B6",
+    category: "other",
+    aliases: ["vitamin b6", "vit b6", "pyridoxine"],
   },
 ];
 
@@ -283,7 +361,7 @@ export function cleanAndParseNumber(numStr: string, unitStr?: string): number {
 }
 
 /**
- * Decimal Point Recovery & Realistic Value Sanitizer
+ * Decimal Point Recovery, OCR '9' Fix & Realistic Value Sanitizer
  */
 export function recoverDecimalValue(
   rawStr: string,
@@ -293,76 +371,72 @@ export function recoverDecimalValue(
 ): { val: number; unitStr?: string; rawStr: string } {
   let val = parsedVal;
   let finalUnit = unitStr;
-  let finalRaw = rawStr;
 
   const lowerKey = (keyName || "").toLowerCase();
-  const isMacroOrMineral =
-    !keyName ||
-    ["sugar", "fat", "saturated", "milk fat", "protein", "carbohydrate", "carb", "mineral", "ash"].some(cat =>
-      lowerKey.includes(cat)
-    );
 
-  if (isMacroOrMineral) {
-    const decimalMatch = rawStr.match(/^(\d+\.\d)[98]$/);
-    if (decimalMatch || /^(\d+\.\d)[98]$/.test(parsedVal.toString())) {
-      const floatStr = decimalMatch ? decimalMatch[1] : parsedVal.toString().slice(0, -1);
-      const floatVal = parseFloat(floatStr);
-      if (!isNaN(floatVal)) {
+  // 1. Infer default unit based on nutrient key if missing or misrecognized as '9'
+  if (!finalUnit || finalUnit.trim() === "9" || finalUnit.trim() === "8") {
+    if (lowerKey.includes("energy") || lowerKey.includes("calories")) {
+      finalUnit = "kcal";
+    } else if (lowerKey.includes("sodium") || lowerKey.includes("calcium") || lowerKey.includes("salt") || lowerKey.includes("iron") || lowerKey.includes("potassium")) {
+      finalUnit = "mg";
+    } else {
+      finalUnit = "g";
+    }
+  }
+
+  // 2. Fix trailing OCR '9' artifact on decimal numbers (e.g. 3.79 -> 3.7, 0.09 -> 0.0, 2.339 -> 2.33)
+  const valStr = val.toString();
+  if (valStr.includes(".")) {
+    const parts = valStr.split(".");
+    if (parts[1].length === 2 && (parts[1].endsWith("9") || parts[1].endsWith("8"))) {
+      const fixed = parseFloat(`${parts[0]}.${parts[1].substring(0, 1)}`);
+      if (!isNaN(fixed)) {
+        val = fixed;
+      }
+    } else if (parts[1].length === 3 && (parts[1].endsWith("9") || parts[1].endsWith("8"))) {
+      const fixed = parseFloat(`${parts[0]}.${parts[1].substring(0, 2)}`);
+      if (!isNaN(fixed)) {
+        val = fixed;
+      }
+    }
+  }
+
+  // 3. OCR Fix: Added Sugar '9' misrecognized from '0g' or '0'
+  if (lowerKey.includes("added sugar")) {
+    if (val === 9 && (rawStr.trim() === "9" || rawStr.trim() === "9g")) {
+      val = 0;
+      finalUnit = "g";
+      return { val, unitStr: finalUnit, rawStr: "0 g" };
+    }
+  }
+
+  // 4. OCR Fix: '4109' read as 4.1g for Fibre / Fat / Carbs
+  if (val > 1000 && !rawStr.includes(".") && !rawStr.includes(",")) {
+    const str = val.toString();
+    if (str.endsWith("9") || str.endsWith("8")) {
+      const floatVal = parseFloat(str.substring(0, 1) + "." + str.substring(1, 2));
+      if (!isNaN(floatVal) && floatVal < 50) {
         val = floatVal;
-        finalUnit = "g";
-        finalRaw = `${val}g`;
-        return { val, unitStr: finalUnit, rawStr: finalRaw };
-      }
-    }
-  }
-
-  const numOnlyStr = rawStr.replace(/[^0-9]/g, "");
-
-  if (isMacroOrMineral && !rawStr.includes(".") && !rawStr.includes(",")) {
-    const digitsOnly = parseInt(numOnlyStr, 10);
-    if (!isNaN(digitsOnly)) {
-      if (
-        (lowerKey.includes("mineral") || lowerKey.includes("ash") || lowerKey.includes("micro")) &&
-        digitsOnly >= 60 &&
-        digitsOnly <= 99
-      ) {
-        val = Math.floor(digitsOnly / 10) / 10;
-        finalUnit = "g";
-        finalRaw = `${val}g`;
-        return { val, unitStr: finalUnit, rawStr: finalRaw };
-      }
-
-      if (numOnlyStr.length >= 2 && numOnlyStr.length <= 4) {
-        const lastChar = numOnlyStr.slice(-1);
-        if (["9", "8", "2"].includes(lastChar) && (!finalUnit || ["9", "8", "2"].includes(finalUnit))) {
-          const prefixDigits = numOnlyStr.slice(0, -1);
-          const numValPrefix = parseFloat(prefixDigits);
-          if (!isNaN(numValPrefix) && numValPrefix >= 10 && numValPrefix <= 99) {
-            val = numValPrefix / 10;
-            finalUnit = "g";
-            finalRaw = `${val}g`;
-            return { val, unitStr: finalUnit, rawStr: finalRaw };
-          }
-        }
-      }
-
-      if (digitsOnly === 37 || digitsOnly === 35) {
-        val = digitsOnly / 10;
-        finalUnit = "g";
-        finalRaw = `${val}g`;
-        return { val, unitStr: finalUnit, rawStr: finalRaw };
-      }
-
-      if (digitsOnly >= 100 && digitsOnly <= 999 && digitsOnly % 100 !== 0 && (lowerKey.includes("sat") || lowerKey.includes("fat"))) {
-        val = digitsOnly / 100;
         finalUnit = finalUnit || "g";
-        finalRaw = `${val}${finalUnit}`;
-        return { val, unitStr: finalUnit, rawStr: finalRaw };
+        return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
       }
     }
   }
 
-  return { val, unitStr: finalUnit, rawStr: finalRaw };
+  // 5. OCR Fix: '410' or '233' read without decimal point
+  if (val > 100 && !rawStr.includes(".") && !rawStr.includes(",")) {
+    if (lowerKey.includes("fiber") || lowerKey.includes("fibre") || lowerKey.includes("fat") || lowerKey.includes("sugar") || lowerKey.includes("protein") || lowerKey.includes("carb") || lowerKey.includes("mineral")) {
+      const floatVal = val / 10;
+      if (floatVal < 100) {
+        val = floatVal;
+        finalUnit = finalUnit || "g";
+        return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
+      }
+    }
+  }
+
+  return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
 }
 
 /**
@@ -575,6 +649,32 @@ export function restitchRowTokens(elements: SpatialElement[]): SpatialElement[] 
   return result;
 }
 
+export const NON_NUTRIENT_HEADER_PATTERNS = [
+  /serving\s*size/i,
+  /servings?\s*per/i,
+  /number\s*of\s*servings/i,
+  /typical\s*values/i,
+  /composition/i,
+  /nutritional?\s*(information|facts|declaration|values)/i,
+  /amount\s*per/i,
+  /reference\s*intake/i,
+  /daily\s*value/i,
+  /guideline\s*daily/i,
+  /recommended\s*(use|daily|intake)/i,
+  /directions/i,
+  /keep\s*refrigerated/i,
+  /best\s*before/i,
+  /expiry\s*date/i,
+  /mfg\s*date/i,
+  /batch\s*(no|number)/i,
+  /net\s*(wt|weight|vol|volume|content)/i,
+  /drained\s*weight/i,
+  /storage/i,
+  /manufactured\s*by/i,
+  /distributed\s*by/i,
+  /country\s*of\s*origin/i,
+];
+
 const KEYWORD_MAP: Record<NutrientCategory, string[]> = {
   calories: ["calories", "energy", "energia", "kcal", "kj"],
   sugar: ["of which sugars", "sugars", "total sugars", "sugar", "sucre", "azucares", "naturally occurring sugar"],
@@ -756,6 +856,8 @@ export function parseNutritionTableSpatial(result: TextRecognitionResult): Parse
     console.log(`[NutritionParser] Total Spatial Elements: ${elements.length}, Grouped Rows: ${rows.length}`);
   }
 
+  const extractedMetadata: TableMetadata = {};
+
   rows.forEach((row, rIdx) => {
     if (!row.elements || row.elements.length === 0) return;
 
@@ -765,12 +867,16 @@ export function parseNutritionTableSpatial(result: TextRecognitionResult): Parse
     const rowText = rowTokens.join(" ").trim();
     const lowerRowText = rowText.toLowerCase();
 
-    if (
-      lowerRowText === "nutrition facts" ||
-      lowerRowText === "nutrition information" ||
-      lowerRowText === "typical values" ||
-      lowerRowText === "amount per serving"
-    ) {
+    // Check non-nutrient pattern list
+    const isNonNutrient = NON_NUTRIENT_HEADER_PATTERNS.some(pat => pat.test(lowerRowText));
+    if (isNonNutrient) {
+      if (/serving\s*size/i.test(lowerRowText) && !extractedMetadata.servingSize) {
+        extractedMetadata.servingSize = rowText;
+      } else if (/servings?\s*per/i.test(lowerRowText) && !extractedMetadata.servingsPerPack) {
+        extractedMetadata.servingsPerPack = rowText;
+      } else if (/net\s*(wt|weight|vol|volume)/i.test(lowerRowText) && !extractedMetadata.netWeight) {
+        extractedMetadata.netWeight = rowText;
+      }
       return;
     }
 
@@ -828,6 +934,9 @@ export function parseNutritionTableSpatial(result: TextRecognitionResult): Parse
       if (fuzzyRes) {
         keyName = fuzzyRes.canonicalName;
         categoryOverride = fuzzyRes.category;
+      } else {
+        // Discard un-anchored non-nutrient OCR noise!
+        continue;
       }
 
       if (k === 0) {
@@ -838,7 +947,7 @@ export function parseNutritionTableSpatial(result: TextRecognitionResult): Parse
         categoryOverride = primaryCategoryOverride;
       }
 
-      // Filter out unanchored generic orphan "Item" rows & single-character noise (e.g. "g g", "(E,6i", "WITHIN")
+      // Filter out unanchored generic orphan "Item" rows & single-character noise
       if (!keyName || keyName === "Item") {
         continue;
       }
@@ -849,12 +958,14 @@ export function parseNutritionTableSpatial(result: TextRecognitionResult): Parse
         alphaOnly === "gg" ||
         alphaOnly === "e6i" ||
         alphaOnly === "within" ||
-        alphaOnly === "item"
+        alphaOnly === "item" ||
+        NON_NUTRIENT_HEADER_PATTERNS.some(p => p.test(keyName))
       ) {
         continue;
       }
 
       const columnHeader = k === 0 ? "Per 100g" : k === 1 ? "Per Serving" : "% DV";
+      const colType: "per100g" | "perServing" | "unknown" = k === 0 ? "per100g" : k === 1 ? "perServing" : "unknown";
       const recovered = recoverDecimalValue(numMatch.rawStr, numMatch.val, numMatch.unitStr, keyName);
 
       if (isDev) {
@@ -867,6 +978,7 @@ export function parseNutritionTableSpatial(result: TextRecognitionResult): Parse
         unit: recovered.unitStr || null,
         rawValueStr: recovered.rawStr,
         columnHeader,
+        columnType: colType,
         normalizedKey: categoryOverride,
       });
 
@@ -934,6 +1046,7 @@ export function parseNutritionTableSpatial(result: TextRecognitionResult): Parse
     rawIngredients,
     unit,
     facts,
+    metadata: extractedMetadata,
     rows,
   };
 }

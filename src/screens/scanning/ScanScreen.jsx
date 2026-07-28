@@ -97,15 +97,21 @@ const ScanScreen = ({ navigation }) => {
 
     try {
       const ocrResults = [];
-      // Take 2 rapid snapshots as requested by user
       for (let i = 0; i < 2; i++) {
-        const snapshot = await scannerRef.current.takeSnapshot();
-        if (snapshot && snapshot.path) {
-          const imageUri = snapshot.path.startsWith('file://') ? snapshot.path : `file://${snapshot.path}`;
-          const textResult = await TextRecognition.recognize(imageUri);
-          ocrResults.push(textResult);
+        if (!scannerRef.current) break;
+        try {
+          const snapshot = await scannerRef.current.takeSnapshot();
+          if (snapshot && snapshot.path) {
+            const imageUri = snapshot.path.startsWith('file://') ? snapshot.path : `file://${snapshot.path}`;
+            const textResult = await TextRecognition.recognize(imageUri);
+            if (textResult && textResult.text) {
+              ocrResults.push(textResult);
+            }
+          }
+        } catch (sErr) {
+          console.warn("Snapshot capture warning:", sErr);
         }
-        if (i < 1) await new Promise(r => setTimeout(r, 80));
+        if (i < 1) await new Promise(r => setTimeout(r, 120));
       }
 
       if (ocrResults.length === 0) {
@@ -119,43 +125,59 @@ const ScanScreen = ({ navigation }) => {
       const detectedIngredients = normalizedIngredients.map(item => item.product_name || '');
       const detectedAllergenTags = normalizedIngredients.flatMap(item => item.allergens_tags || []);
 
-      const allNutrientItems = [];
-      const dynamicItems = fusedResult.facts.dynamicItems || [];
+      const rawMetadata = fusedResult.facts.metadata || {};
 
-      dynamicItems.forEach(item => {
-        if (!item.rawName || item.numericValue === null || item.numericValue === undefined) return;
-        
-        let label = item.rawName;
-        let val = item.numericValue;
-        let unit = item.unit || '';
+      const mapItems = (items) => {
+        const list = [];
+        (items || []).forEach(item => {
+          if (!item.rawName || item.numericValue === null || item.numericValue === undefined) return;
+          let label = item.rawName;
+          let val = item.numericValue;
+          let unit = item.unit || '';
 
-        // Energy / kJ to kcal conversion
-        if (label.toLowerCase().includes('energy')) {
-          if (unit.toLowerCase() === 'kj' || item.rawValueStr?.toLowerCase().includes('kj')) {
-            val = Math.round(val / 4.184);
-            unit = 'kcal';
-            label = 'Energy';
-          } else if (!unit) {
-            unit = 'kcal';
+          if (label.toLowerCase().includes('energy')) {
+            const rawStr = item.rawValueStr || '';
+            const kjMatch = rawStr.match(/(\d+(?:\.\d+)?)\s*kj/i);
+            if (unit.toLowerCase() === 'kj' || kjMatch) {
+              const origKj = kjMatch ? Math.round(parseFloat(kjMatch[1])) : Math.round(val);
+              const kcalVal = Math.round(origKj / 4.184);
+              label = 'Energy';
+              val = kcalVal;
+              unit = `kcal (${origKj} kJ)`;
+            } else if (!unit) {
+              unit = 'kcal';
+            }
           }
-        }
 
-        // Infer unit from raw string if missing
-        if (!unit && item.rawValueStr) {
-          const lowerRaw = item.rawValueStr.toLowerCase();
-          if (lowerRaw.includes('mg')) unit = 'mg';
-          else if (lowerRaw.includes('mcg') || lowerRaw.includes('µg')) unit = 'mcg';
-          else if (lowerRaw.includes('g')) unit = 'g';
-          else if (lowerRaw.includes('kj')) unit = 'kJ';
-          else if (lowerRaw.includes('kcal')) unit = 'kcal';
-        }
+          if (!unit && item.rawValueStr) {
+            const lowerRaw = item.rawValueStr.toLowerCase();
+            if (lowerRaw.includes('mg')) unit = 'mg';
+            else if (lowerRaw.includes('mcg') || lowerRaw.includes('µg')) unit = 'mcg';
+            else if (lowerRaw.includes('g')) unit = 'g';
+            else if (lowerRaw.includes('kj')) unit = 'kJ';
+            else if (lowerRaw.includes('kcal')) unit = 'kcal';
+          }
 
-        allNutrientItems.push({
-          label,
-          value: val,
-          unit: unit ? (unit.startsWith(' ') ? unit : ` ${unit}`) : ''
+          list.push({
+            label,
+            value: val,
+            unit: unit ? (unit.startsWith(' ') ? unit : ` ${unit}`) : ''
+          });
         });
-      });
+        return list;
+      };
+
+      const allDynamic = fusedResult.facts.dynamicItems || [];
+      const p100 = (fusedResult.facts.per100gItems && fusedResult.facts.per100gItems.length > 0)
+        ? fusedResult.facts.per100gItems
+        : allDynamic.filter(i => i.columnType === 'per100g' || !i.columnType);
+
+      const pServ = (fusedResult.facts.perServingItems && fusedResult.facts.perServingItems.length > 0)
+        ? fusedResult.facts.perServingItems
+        : allDynamic.filter(i => i.columnType === 'perServing');
+
+      const per100gItems = mapItems(p100);
+      const perServingItems = mapItems(pServ);
 
       const getMacro = (category) => {
         const item = fusedResult.facts.tableItems?.find(i => i.normalizedKey === category);
@@ -166,7 +188,10 @@ const ScanScreen = ({ navigation }) => {
         productName: 'Scanned Packet',
         detectedIngredients,
         detectedAllergenTags,
-        allNutrientItems,
+        metadata: rawMetadata,
+        per100gItems,
+        perServingItems,
+        allNutrientItems: per100gItems.length > 0 ? per100gItems : perServingItems,
         nutritionFacts: {
           unit: fusedResult.facts.unit,
           calories: fusedResult.facts.calories,
@@ -230,6 +255,30 @@ const ScanScreen = ({ navigation }) => {
                 </View>
               </View>
 
+              {/* Product & Serving Details Container */}
+              {result.food.metadata && (result.food.metadata.servingSize || result.food.metadata.servingsPerPack || result.food.metadata.netWeight) && (
+                <View style={[styles.flagsSection, { backgroundColor: '#F8F9FA', borderRadius: 8, padding: 12, marginVertical: 8 }]}>
+                  <Text style={[styles.flagsSectionTitle, { color: '#2C3E50', fontSize: fs(14), marginBottom: 6 }]}>
+                    📦 Product & Serving Details
+                  </Text>
+                  {result.food.metadata.servingSize && (
+                    <Text style={{ fontSize: fs(13), color: '#555', marginBottom: 2 }}>
+                      • <Text style={{ fontWeight: '600' }}>Serving Size:</Text> {result.food.metadata.servingSize}
+                    </Text>
+                  )}
+                  {result.food.metadata.servingsPerPack && (
+                    <Text style={{ fontSize: fs(13), color: '#555', marginBottom: 2 }}>
+                      • <Text style={{ fontWeight: '600' }}>Servings per Pack:</Text> {result.food.metadata.servingsPerPack}
+                    </Text>
+                  )}
+                  {result.food.metadata.netWeight && (
+                    <Text style={{ fontSize: fs(13), color: '#555', marginBottom: 2 }}>
+                      • <Text style={{ fontWeight: '600' }}>Net Quantity:</Text> {result.food.metadata.netWeight}
+                    </Text>
+                  )}
+                </View>
+              )}
+
               {result.evaluation.flaggedIngredients && result.evaluation.flaggedIngredients.length > 0 && (
                 <View style={styles.flagsSection}>
                   <Text style={styles.flagsSectionTitle}>Flagged Interactions</Text>
@@ -249,15 +298,32 @@ const ScanScreen = ({ navigation }) => {
                 </View>
               )}
 
-              {/* Dynamic Macro Quantities Section */}
-              {result.food.allNutrientItems && result.food.allNutrientItems.length > 0 && (
+              {/* Per 100g / 100ml Nutrition Facts (Primary Basis) */}
+              {result.food.per100gItems && result.food.per100gItems.length > 0 && (
                 <View style={styles.macrosSection}>
                   <Text style={styles.flagsSectionTitle}>
-                    Extracted Nutrition Facts {result.food.nutritionFacts?.unit === 'per100g' ? '(Per 100g/ml)' : result.food.nutritionFacts?.unit === 'perServing' ? '(Per Serving)' : ''}
+                    Extracted Nutrition Facts (Per 100g/ml Basis)
                   </Text>
                   <View style={styles.macrosGrid}>
-                    {result.food.allNutrientItems.map((item, idx) => (
+                    {result.food.per100gItems.map((item, idx) => (
                       <View key={idx} style={styles.macroBadge}>
+                        <Text style={styles.macroLabel}>{item.label}</Text>
+                        <Text style={styles.macroValue}>{item.value}{item.unit}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Per Serving Nutrition Facts (Side-by-side / Secondary Column) */}
+              {result.food.perServingItems && result.food.perServingItems.length > 0 && (
+                <View style={[styles.macrosSection, { marginTop: 12 }]}>
+                  <Text style={[styles.flagsSectionTitle, { color: '#7F8C8D' }]}>
+                    Extracted Nutrition Facts (Per Serving Basis)
+                  </Text>
+                  <View style={styles.macrosGrid}>
+                    {result.food.perServingItems.map((item, idx) => (
+                      <View key={idx} style={[styles.macroBadge, { backgroundColor: '#F0F4F8' }]}>
                         <Text style={styles.macroLabel}>{item.label}</Text>
                         <Text style={styles.macroValue}>{item.value}{item.unit}</Text>
                       </View>
@@ -295,10 +361,14 @@ const ScanScreen = ({ navigation }) => {
                 <Text style={styles.analyzingText}>Extracting Ingredients...</Text>
               </View>
             ) : (
-              <View style={styles.analyzingWrapper}>
-                 <ActivityIndicator size="large" color="#FFF" />
-                 <Text style={styles.analyzingText}>Stabilizing Lens...</Text>
-              </View>
+              <TouchableOpacity
+                style={styles.manualCaptureBtn}
+                activeOpacity={0.8}
+                onPress={handleStableDetection}
+              >
+                <Feather name="camera" size={fs(20)} color="#FFFFFF" style={{ marginRight: wp(2) }} />
+                <Text style={styles.manualCaptureText}>Scan Label Now</Text>
+              </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.closeBtn} onPress={() => setIsCameraActive(false)}>
                <Feather name="x" size={fs(28)} color="#FFFFFF" />
@@ -585,6 +655,27 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bold,
     fontSize: fs(14),
     color: '#004C99',
+  },
+  manualCaptureBtn: {
+    position: 'absolute',
+    bottom: hp(5),
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#009933',
+    paddingHorizontal: wp(6),
+    paddingVertical: hp(1.8),
+    borderRadius: wp(7),
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  manualCaptureText: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(15),
+    color: '#FFFFFF',
   },
   actionRow: {
     flexDirection: 'row',
