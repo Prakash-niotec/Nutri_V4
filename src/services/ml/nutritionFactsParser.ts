@@ -77,6 +77,9 @@ export type NutrientCategory =
   | "protein"
   | "carbohydrates"
   | "fiber"
+  | "transFat"
+  | "calcium"
+  | "minerals"
   | "other";
 
 export interface NutrientItem {
@@ -191,6 +194,21 @@ export const CANONICAL_KEYS: CanonicalKeyDef[] = [
     category: "fiber",
     aliases: ["dietary fiber", "fiber", "fibres", "fibra"],
   },
+  {
+    canonicalName: "Trans Fat",
+    category: "transFat",
+    aliases: ["trans fat", "trans fatty acids", "trans fatty", "trans-fat"],
+  },
+  {
+    canonicalName: "Calcium",
+    category: "calcium",
+    aliases: ["calcium", "calcium (ca)", "ca"],
+  },
+  {
+    canonicalName: "Minerals",
+    category: "minerals",
+    aliases: ["minerals", "ash", "mineral"],
+  },
 ];
 
 /**
@@ -261,9 +279,6 @@ export function cleanAndParseNumber(numStr: string, unitStr?: string): number {
   const sanitized = sanitizeOcrToken(numStr);
   const val = parseFloat(sanitized.replace(/,/g, "."));
   if (isNaN(val)) return 0;
-  if (unitStr && unitStr.toLowerCase() === "mg") {
-    return val / 1000;
-  }
   return val;
 }
 
@@ -562,13 +577,16 @@ export function restitchRowTokens(elements: SpatialElement[]): SpatialElement[] 
 
 const KEYWORD_MAP: Record<NutrientCategory, string[]> = {
   calories: ["calories", "energy", "energia", "kcal", "kj"],
-  sugar: ["of which sugars", "sugars", "total sugars", "sugar", "sucre", "azucares"],
-  sodium: ["sodium", "salt", "sal", "sel", "na"],
-  saturatedFat: ["of which saturates", "saturated fat", "saturated", "sat fat", "sat. fat", "acides gras satures"],
-  totalFat: ["total fat", "fat", "lipides", "grasas", "fat/lipides"],
+  sugar: ["of which sugars", "sugars", "total sugars", "sugar", "sucre", "azucares", "naturally occurring sugar"],
+  sodium: ["sodium", "salt", "sal", "sel", "na", "sodium (na)"],
+  saturatedFat: ["of which saturates", "saturated fat", "saturated fatty acids", "saturated", "sat fat", "sat. fat", "acides gras satures"],
+  totalFat: ["total fat", "fat", "lipides", "grasas", "fat/lipides", "total milk fat", "milk fat"],
   protein: ["protein", "proteines", "proteina"],
-  carbohydrates: ["carbohydrate", "carbohydrates", "total carb", "carbs", "glucides"],
+  carbohydrates: ["carbohydrate", "carbohydrates", "total carb", "total carbohydrate", "carbs", "glucides"],
   fiber: ["dietary fiber", "fiber", "fibres", "fibra"],
+  transFat: ["trans fat", "trans fatty acids", "trans fatty"],
+  calcium: ["calcium", "calcium (ca)", "ca"],
+  minerals: ["minerals", "mineral"],
   other: [],
 };
 

@@ -119,6 +119,44 @@ const ScanScreen = ({ navigation }) => {
       const detectedIngredients = normalizedIngredients.map(item => item.product_name || '');
       const detectedAllergenTags = normalizedIngredients.flatMap(item => item.allergens_tags || []);
 
+      const allNutrientItems = [];
+      const dynamicItems = fusedResult.facts.dynamicItems || [];
+
+      dynamicItems.forEach(item => {
+        if (!item.rawName || item.numericValue === null || item.numericValue === undefined) return;
+        
+        let label = item.rawName;
+        let val = item.numericValue;
+        let unit = item.unit || '';
+
+        // Energy / kJ to kcal conversion
+        if (label.toLowerCase().includes('energy')) {
+          if (unit.toLowerCase() === 'kj' || item.rawValueStr?.toLowerCase().includes('kj')) {
+            val = Math.round(val / 4.184);
+            unit = 'kcal';
+            label = 'Energy';
+          } else if (!unit) {
+            unit = 'kcal';
+          }
+        }
+
+        // Infer unit from raw string if missing
+        if (!unit && item.rawValueStr) {
+          const lowerRaw = item.rawValueStr.toLowerCase();
+          if (lowerRaw.includes('mg')) unit = 'mg';
+          else if (lowerRaw.includes('mcg') || lowerRaw.includes('µg')) unit = 'mcg';
+          else if (lowerRaw.includes('g')) unit = 'g';
+          else if (lowerRaw.includes('kj')) unit = 'kJ';
+          else if (lowerRaw.includes('kcal')) unit = 'kcal';
+        }
+
+        allNutrientItems.push({
+          label,
+          value: val,
+          unit: unit ? (unit.startsWith(' ') ? unit : ` ${unit}`) : ''
+        });
+      });
+
       const getMacro = (category) => {
         const item = fusedResult.facts.tableItems?.find(i => i.normalizedKey === category);
         return item ? item.numericValue : undefined;
@@ -128,6 +166,7 @@ const ScanScreen = ({ navigation }) => {
         productName: 'Scanned Packet',
         detectedIngredients,
         detectedAllergenTags,
+        allNutrientItems,
         nutritionFacts: {
           unit: fusedResult.facts.unit,
           calories: fusedResult.facts.calories,
@@ -210,41 +249,19 @@ const ScanScreen = ({ navigation }) => {
                 </View>
               )}
 
-              {/* Macro Quantities Section */}
-              {Object.values(result.food.nutritionFacts).some(v => v !== undefined) && (
+              {/* Dynamic Macro Quantities Section */}
+              {result.food.allNutrientItems && result.food.allNutrientItems.length > 0 && (
                 <View style={styles.macrosSection}>
-                  <Text style={styles.flagsSectionTitle}>Extracted Nutrition Facts</Text>
+                  <Text style={styles.flagsSectionTitle}>
+                    Extracted Nutrition Facts {result.food.nutritionFacts?.unit === 'per100g' ? '(Per 100g/ml)' : result.food.nutritionFacts?.unit === 'perServing' ? '(Per Serving)' : ''}
+                  </Text>
                   <View style={styles.macrosGrid}>
-                    {result.food.nutritionFacts.calories !== undefined && (
-                      <View style={styles.macroBadge}>
-                        <Text style={styles.macroLabel}>Calories</Text>
-                        <Text style={styles.macroValue}>{result.food.nutritionFacts.calories} kcal</Text>
+                    {result.food.allNutrientItems.map((item, idx) => (
+                      <View key={idx} style={styles.macroBadge}>
+                        <Text style={styles.macroLabel}>{item.label}</Text>
+                        <Text style={styles.macroValue}>{item.value}{item.unit}</Text>
                       </View>
-                    )}
-                    {result.food.nutritionFacts.sugar_g !== undefined && (
-                      <View style={styles.macroBadge}>
-                        <Text style={styles.macroLabel}>Sugar</Text>
-                        <Text style={styles.macroValue}>{result.food.nutritionFacts.sugar_g}g</Text>
-                      </View>
-                    )}
-                    {result.food.nutritionFacts.sodium_mg !== undefined && (
-                      <View style={styles.macroBadge}>
-                        <Text style={styles.macroLabel}>Sodium</Text>
-                        <Text style={styles.macroValue}>{result.food.nutritionFacts.sodium_mg}mg</Text>
-                      </View>
-                    )}
-                    {result.food.nutritionFacts.protein_g !== undefined && (
-                      <View style={styles.macroBadge}>
-                        <Text style={styles.macroLabel}>Protein</Text>
-                        <Text style={styles.macroValue}>{result.food.nutritionFacts.protein_g}g</Text>
-                      </View>
-                    )}
-                    {result.food.nutritionFacts.totalCarbs_g !== undefined && (
-                      <View style={styles.macroBadge}>
-                        <Text style={styles.macroLabel}>Carbs</Text>
-                        <Text style={styles.macroValue}>{result.food.nutritionFacts.totalCarbs_g}g</Text>
-                      </View>
-                    )}
+                    ))}
                   </View>
                 </View>
               )}

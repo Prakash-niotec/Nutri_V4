@@ -12,25 +12,30 @@ export const initIngredientDatabase = async () => {
     const dbDir = FileSystem.documentDirectory + 'SQLite/';
     const dbPath = dbDir + DB_NAME;
 
-    // Check if directory exists
-    const dirInfo = await FileSystem.getInfoAsync(dbDir);
-    if (!dirInfo.exists) {
-        await FileSystem.makeDirectoryAsync(dbDir, { intermediates: true });
-    }
+    try {
+        const dirInfo = await FileSystem.getInfoAsync(dbDir);
+        if (!dirInfo.exists) {
+            await FileSystem.makeDirectoryAsync(dbDir, { intermediates: true });
+        }
 
-    // Check if DB exists, if not, copy it from assets
-    const dbInfo = await FileSystem.getInfoAsync(dbPath);
-    if (!dbInfo.exists) {
-        const asset = Asset.fromModule(require('../../../assets/db/nutrilens_ingredients.db'));
-        await asset.downloadAsync();
-        await FileSystem.copyAsync({
-            from: asset.localUri || asset.uri || '',
-            to: dbPath
-        });
-    }
+        const dbInfo = await FileSystem.getInfoAsync(dbPath);
+        if (!dbInfo.exists || dbInfo.size === 0) {
+            const asset = Asset.fromModule(require('../../../assets/db/nutrilens_ingredients.db'));
+            await asset.downloadAsync();
+            const sourceUri = asset.localUri || asset.uri;
+            if (sourceUri) {
+                await FileSystem.copyAsync({
+                    from: sourceUri,
+                    to: dbPath
+                });
+            }
+        }
 
-    db = await SQLite.openDatabaseAsync(DB_NAME);
-    console.log('[SQLite] Ingredient Database initialized.');
+        db = await SQLite.openDatabaseAsync(DB_NAME);
+        console.log('[SQLite] Ingredient Database initialized.');
+    } catch (err) {
+        console.warn('[SQLite] DB Init warning:', err);
+    }
 };
 
 const parseJsonField = (field: any) => {
@@ -42,28 +47,28 @@ const parseJsonField = (field: any) => {
     }
 };
 
-export const searchIngredients = (term: string) => {
+export const searchIngredients = async (term: string) => {
     if (!db) return [];
     if (!term || typeof term !== 'string') return [];
     const queryTerm = `%${term}%`;
 
     try {
-        let results = db.getAllSync(`
+        let results = (await db.getAllAsync(`
             SELECT * FROM ingredients_library 
             WHERE product_name LIKE ? OR ingredients_en LIKE ?
             LIMIT 10
-        `, [queryTerm, queryTerm]) as any[];
+        `, [queryTerm, queryTerm])) as any[];
 
         if (results.length === 0) {
             const tokens = term.split(/[\s,]+/).filter(t => t.length > 3);
             if (tokens.length > 0) {
                 const conditions = tokens.map(() => `ingredients_en LIKE ? OR product_name LIKE ?`).join(' OR ');
                 const params = tokens.flatMap(t => [`%${t}%`, `%${t}%`]);
-                const fuzzyResults = db.getAllSync(`
+                const fuzzyResults = (await db.getAllAsync(`
                     SELECT * FROM ingredients_library
                     WHERE ${conditions}
                     LIMIT 10
-                `, params) as any[];
+                `, params)) as any[];
 
                 if (fuzzyResults.length > 0) {
                     results = fuzzyResults.filter((row: any) => {
@@ -93,7 +98,7 @@ export const normalizeOcrIngredients = async (rawOCRStrings: string[]) => {
     
     const normalizedList: any[] = [];
     for (const raw of rawOCRStrings) {
-        const matches = searchIngredients(raw);
+        const matches = await searchIngredients(raw);
         if (matches.length > 0) {
             normalizedList.push(matches[0]); // Take top match
         } else {
