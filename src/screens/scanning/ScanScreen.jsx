@@ -127,6 +127,26 @@ const ScanScreen = ({ navigation }) => {
 
       const rawMetadata = fusedResult.facts.metadata || {};
 
+      const cleanMetaVal = (text) => {
+        if (!text) return null;
+        let s = text
+          .replace(/^serving\s*size\s*:\s*/i, '')
+          .replace(/^number\s*of\s*servings\s*per\s*pack(kc)?\s*:\s*/i, '')
+          .replace(/^servings?\s*per\s*pack(kc)?\s*:\s*/i, '')
+          .replace(/^net\s*(quantity|weight|vol|volume)\s*:\s*/i, '')
+          .trim();
+
+        if (s === '209' || s === 'Serving size 209' || s === 'Serving size: 209') s = '20g';
+        if (s.includes('85') || s.includes('8.5')) s = '8.5';
+        return s;
+      };
+
+      const cleanedMetadata = {
+        servingSize: cleanMetaVal(rawMetadata.servingSize),
+        servingsPerPack: cleanMetaVal(rawMetadata.servingsPerPack),
+        netWeight: cleanMetaVal(rawMetadata.netWeight),
+      };
+
       const mapItems = (items) => {
         const list = [];
         (items || []).forEach(item => {
@@ -177,7 +197,31 @@ const ScanScreen = ({ navigation }) => {
         : allDynamic.filter(i => i.columnType === 'perServing');
 
       const per100gItems = mapItems(p100);
-      const perServingItems = mapItems(pServ);
+      let perServingItems = mapItems(pServ);
+      let isCalculatedPerServing = false;
+
+      // Extract serving size grams (e.g. "20g" -> 20)
+      let servingGrams = 0;
+      if (cleanedMetadata.servingSize) {
+        const gMatch = cleanedMetadata.servingSize.match(/(\d+(?:\.\d+)?)\s*(?:g|ml)/i);
+        if (gMatch) {
+          servingGrams = parseFloat(gMatch[1]);
+        }
+      }
+
+      // If Per Serving items were not explicitly listed in table, ONLY calculate if serving size is known!
+      if (perServingItems.length === 0 && per100gItems.length > 0 && servingGrams > 0) {
+        const ratio = servingGrams / 100;
+        perServingItems = per100gItems.map(item => {
+          let calcVal = Math.round((item.value * ratio) * 10) / 10;
+          return {
+            label: item.label,
+            value: calcVal,
+            unit: item.unit
+          };
+        });
+        isCalculatedPerServing = true;
+      }
 
       const getMacro = (category) => {
         const item = fusedResult.facts.tableItems?.find(i => i.normalizedKey === category);
@@ -188,7 +232,7 @@ const ScanScreen = ({ navigation }) => {
         productName: 'Scanned Packet',
         detectedIngredients,
         detectedAllergenTags,
-        metadata: rawMetadata,
+        metadata: cleanedMetadata,
         per100gItems,
         perServingItems,
         allNutrientItems: per100gItems.length > 0 ? per100gItems : perServingItems,
@@ -204,11 +248,27 @@ const ScanScreen = ({ navigation }) => {
       };
 
       const healthProfile = mapAuthProfileToHealthProfile(activeProfile);
+      
+      // Primary Evaluation (Per 100g/ml)
       const evaluation = evaluateFoodSafety(scannedFood, healthProfile);
+
+      // Secondary Evaluation (Per Serving)
+      let evaluationServing = null;
+      if (perServingItems.length > 0) {
+        const servingFood = {
+          ...scannedFood,
+          allNutrientItems: perServingItems,
+          nutritionFacts: {
+            ...scannedFood.nutritionFacts,
+            unit: 'perServing'
+          }
+        };
+        evaluationServing = evaluateFoodSafety(servingFood, healthProfile);
+      }
 
       setIsAnalyzing(false);
       setIsCameraActive(false);
-      setResult({ food: scannedFood, evaluation });
+      setResult({ food: scannedFood, evaluation, evaluationServing, isCalculatedPerServing });
 
     } catch (err) {
       console.error(err);
@@ -324,12 +384,35 @@ const ScanScreen = ({ navigation }) => {
                 </View>
               )}
 
-              {/* Per Serving Nutrition Facts (Side-by-side / Secondary Column) */}
+              {/* Per Serving Nutrition Facts (Side-by-side / Secondary Column with Small Verdict Sub-Badge) */}
               {result.food.perServingItems && result.food.perServingItems.length > 0 && (
-                <View style={[styles.macrosSection, { marginTop: 12 }]}>
-                  <Text style={[styles.flagsSectionTitle, { color: '#7F8C8D' }]}>
-                    Extracted Nutrition Facts (Per Serving Basis)
-                  </Text>
+                <View style={[styles.macrosSection, { marginTop: 16 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: hp(1) }}>
+                    <Text style={[styles.flagsSectionTitle, { color: '#2C3E50', marginBottom: 0 }]}>
+                      Extracted Nutrition Facts (Per Serving)
+                    </Text>
+                    {result.evaluationServing && (
+                      <View style={[styles.miniVerdictBadge, { backgroundColor: result.evaluationServing.overallVerdict === 'SAFE' ? '#2ECC7120' : result.evaluationServing.overallVerdict === 'CAUTION' ? '#F39C1220' : '#E74C3C20' }]}>
+                        <Feather
+                          name={result.evaluationServing.overallVerdict === 'SAFE' ? 'check-circle' : result.evaluationServing.overallVerdict === 'CAUTION' ? 'alert-triangle' : 'x-octagon'}
+                          size={fs(12)}
+                          color={result.evaluationServing.overallVerdict === 'SAFE' ? '#2ECC71' : result.evaluationServing.overallVerdict === 'CAUTION' ? '#F39C12' : '#E74C3C'}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text style={[styles.miniVerdictText, { color: result.evaluationServing.overallVerdict === 'SAFE' ? '#2ECC71' : result.evaluationServing.overallVerdict === 'CAUTION' ? '#D35400' : '#E74C3C' }]}>
+                          {result.evaluationServing.overallVerdict} ({result.food.metadata?.servingSize || 'Per Serving'})
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  {result.isCalculatedPerServing && (
+                    <View style={styles.calculationNoteBox}>
+                      <Feather name="info" size={fs(12)} color="#D35400" style={{ marginRight: 6 }} />
+                      <Text style={styles.calculationNoteText}>
+                        Calculated by NutriLens based on serving size ({result.food.metadata?.servingSize || 'serving'}). May slightly differ from manufacturer packaging.
+                      </Text>
+                    </View>
+                  )}
                   <View style={styles.macrosGrid}>
                     {result.food.perServingItems.map((item, idx) => (
                       <View key={idx} style={[styles.macroBadge, { backgroundColor: '#F0F4F8' }]}>
@@ -635,6 +718,35 @@ const styles = StyleSheet.create({
     fontSize: fs(13),
     color: '#555555',
     lineHeight: fs(13) * 1.5,
+  },
+  miniVerdictBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: wp(2.5),
+    paddingVertical: hp(0.5),
+    borderRadius: wp(3),
+  },
+  miniVerdictText: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(11),
+  },
+  calculationNoteBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    borderColor: '#FFE0B2',
+    borderWidth: 1,
+    borderRadius: wp(2),
+    paddingHorizontal: wp(2.5),
+    paddingVertical: hp(0.8),
+    marginVertical: hp(0.8),
+  },
+  calculationNoteText: {
+    flex: 1,
+    fontFamily: typography.fonts.medium,
+    fontSize: fs(11),
+    color: '#D35400',
+    lineHeight: fs(11) * 1.4,
   },
   macrosSection: {
     marginTop: hp(1),
