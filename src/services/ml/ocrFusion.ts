@@ -121,7 +121,8 @@ export function fuseOcrResults(results: TextRecognitionResult[]): FusedNutrition
       const fuzzyRes = fuzzyMatchKeyName(item.rawName);
       const canonicalName = fuzzyRes ? fuzzyRes.canonicalName : item.rawName;
       const normalizedKey = fuzzyRes?.category || item.normalizedKey;
-      const clusterKey = canonicalName.toLowerCase();
+      const colType = item.columnType || "per100g";
+      const clusterKey = `${canonicalName.toLowerCase()}_${colType}`;
 
       // Calculate completeness score for candidate
       let score = 1;
@@ -175,6 +176,7 @@ export function fuseOcrResults(results: TextRecognitionResult[]): FusedNutrition
       rawValueStr: bestCandidate.rawValueStr,
       normalizedKey: cluster.normalizedKey,
       columnHeader: bestCandidate.columnHeader,
+      columnType: bestCandidate.columnType || "per100g",
     };
 
     finalDynamicItems.push(finalItem);

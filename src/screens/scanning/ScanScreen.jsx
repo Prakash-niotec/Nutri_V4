@@ -286,7 +286,16 @@ const ScanScreen = ({ navigation }) => {
                     <View key={idx} style={[styles.flagItem, { borderLeftColor: flag.severity === 'CRITICAL' ? '#E74C3C' : flag.severity === 'HIGH' ? '#D35400' : '#E67E22', borderLeftWidth: 4 }]}>
                       <View style={{ flex: 1 }}>
                         <View style={styles.flagHeaderRow}>
-                          <Text style={styles.flagIngredient}>{flag.ingredient.charAt(0).toUpperCase() + flag.ingredient.slice(1)}</Text>
+                          <Text style={styles.flagIngredient}>
+                            {flag.ingredient && flag.ingredient.length > 35 
+                              ? (flag.ingredient.toLowerCase().includes('trans') ? 'Trans Fats'
+                                 : flag.ingredient.toLowerCase().includes('milk') ? 'Milk / Dairy'
+                                 : flag.ingredient.toLowerCase().includes('sugar') ? 'High Sugar'
+                                 : flag.ingredient.toLowerCase().includes('sodium') ? 'High Sodium'
+                                 : flag.ingredient.substring(0, 30) + '...')
+                              : (flag.ingredient ? flag.ingredient.charAt(0).toUpperCase() + flag.ingredient.slice(1) : 'Flagged Item')
+                            }
+                          </Text>
                           <View style={[styles.severityPill, { backgroundColor: flag.severity === 'CRITICAL' ? '#E74C3C15' : '#E67E2215' }]}>
                             <Text style={[styles.flagSeverity, { color: flag.severity === 'CRITICAL' ? '#E74C3C' : '#D35400' }]}>{flag.severity}</Text>
                           </View>
