@@ -10,6 +10,7 @@ export interface DetectedFoodData {
         saturatedFat_g?: number;
         totalCarbs_g?: number;
         protein_g?: number;
+        unit?: 'per100g' | 'perServing' | 'unknown';
     };
     objectDetectionLabel?: string;
     confidence?: number;

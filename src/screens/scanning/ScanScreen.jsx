@@ -6,16 +6,21 @@ import {
   TouchableOpacity,
   Platform,
   ScrollView,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useCameraPermission } from 'react-native-vision-camera';
 import { typography } from '../../utils/typography';
 import { wp, hp, fs, STATUS_BAR_HEIGHT } from '../../utils/responsive';
 import { useAuth } from '../../hooks/useAuth';
 import { evaluateFoodSafety } from '../../services/healthEngine';
 import TextRecognition from '@react-native-ml-kit/text-recognition';
+import { NutritionScanner } from '../../components/scanning/NutritionScanner';
+import { fuseOcrResults } from '../../services/ml/ocrFusion';
+import { normalizeOcrIngredients } from '../../services/nutrition/ingredientDatabase';
 
 // Adapter to map AuthContext user profile format to Health Engine format
 const mapAuthProfileToHealthProfile = (authProfile) => {
@@ -53,12 +58,12 @@ const mapAuthProfileToHealthProfile = (authProfile) => {
 };
 
 const ScanScreen = ({ navigation }) => {
-  const [permission, requestPermission] = useCameraPermissions();
+  const { hasPermission, requestPermission } = useCameraPermission();
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState(null);
 
-  const cameraRef = useRef(null);
+  const scannerRef = useRef(null);
   const { activeProfile } = useAuth();
 
   React.useEffect(() => {
@@ -68,10 +73,17 @@ const ScanScreen = ({ navigation }) => {
   }, [isCameraActive, navigation]);
 
   const startScanning = async () => {
-    if (!permission?.granted) {
-      const { granted } = await requestPermission();
+    if (!hasPermission) {
+      const granted = await requestPermission();
       if (!granted) {
-        alert("Camera permission is required to scan.");
+        Alert.alert(
+          "Camera Permission Required",
+          "NutriLens requires camera access to scan nutrition labels. Please allow camera permissions in your device settings.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Open Settings", onPress: () => Linking.openSettings() }
+          ]
+        );
         return;
       }
     }
@@ -79,62 +91,66 @@ const ScanScreen = ({ navigation }) => {
     setIsCameraActive(true);
   };
 
-  const captureAndAnalyze = async () => {
-    if (!cameraRef.current) return;
+  const handleStableDetection = async () => {
+    if (!scannerRef.current) return;
+    setIsAnalyzing(true);
 
     try {
-      // 1. Take a picture (simulate alignment)
-      const photo = await cameraRef.current.takePictureAsync();
-
-      setIsAnalyzing(true);
-
-      try {
-        const textResult = await TextRecognition.recognize(photo.uri);
-        const rawText = textResult.text.toLowerCase();
-
-        const ingredients = rawText
-          .split(/[\n,;.\-]+/)
-          .map(i => i.trim())
-          .filter(i => i.length > 2); // filtering out noise 
-
-        const extractQuantity = (text, keyword) => {
-          const regex = new RegExp(`${keyword}\\s*[:\\-]?\\s*(\\d+(?:\\.\\d+)?)\\s*(g|mg|kcal|cal)?`, 'i');
-          const match = text.match(regex);
-          return match ? parseFloat(match[1]) : undefined;
-        };
-
-        const nutritionFacts = {
-          calories: extractQuantity(rawText, 'calories') || extractQuantity(rawText, 'energy'),
-          sugar_g: extractQuantity(rawText, 'sugar'),
-          sodium_mg: extractQuantity(rawText, 'sodium'),
-          saturatedFat_g: extractQuantity(rawText, 'saturated fat'),
-          totalCarbs_g: extractQuantity(rawText, 'carbohydrate') || extractQuantity(rawText, 'carbs'),
-          protein_g: extractQuantity(rawText, 'protein')
-        };
-
-        const scannedFood = {
-          productName: 'Scanned Packet',
-          detectedIngredients: ingredients,
-          nutritionFacts
-        };
-
-        const healthProfile = mapAuthProfileToHealthProfile(activeProfile);
-        const evaluation = evaluateFoodSafety(scannedFood, healthProfile);
-
-        setIsAnalyzing(false);
-        setIsCameraActive(false);
-        setResult({ food: scannedFood, evaluation });
-      } catch (ocrError) {
-        console.error("OCR Extraction Error:", ocrError);
-        alert("OCR Failed. Ensure @react-native-ml-kit/text-recognition is built correctly into the native client.");
-        setIsAnalyzing(false);
-        setIsCameraActive(false);
+      const ocrResults = [];
+      // Take 2 rapid snapshots as requested by user
+      for (let i = 0; i < 2; i++) {
+        const snapshot = await scannerRef.current.takeSnapshot();
+        if (snapshot && snapshot.path) {
+          const imageUri = snapshot.path.startsWith('file://') ? snapshot.path : `file://${snapshot.path}`;
+          const textResult = await TextRecognition.recognize(imageUri);
+          ocrResults.push(textResult);
+        }
+        if (i < 1) await new Promise(r => setTimeout(r, 80));
       }
+
+      if (ocrResults.length === 0) {
+        throw new Error("Failed to capture images.");
+      }
+
+      const fusedResult = fuseOcrResults(ocrResults);
+
+      const rawIngredients = fusedResult.facts.rawIngredients || [];
+      const normalizedIngredients = await normalizeOcrIngredients(rawIngredients);
+      const detectedIngredients = normalizedIngredients.map(item => item.product_name || '');
+      const detectedAllergenTags = normalizedIngredients.flatMap(item => item.allergens_tags || []);
+
+      const getMacro = (category) => {
+        const item = fusedResult.facts.tableItems?.find(i => i.normalizedKey === category);
+        return item ? item.numericValue : undefined;
+      };
+
+      const scannedFood = {
+        productName: 'Scanned Packet',
+        detectedIngredients,
+        detectedAllergenTags,
+        nutritionFacts: {
+          unit: fusedResult.facts.unit,
+          calories: fusedResult.facts.calories,
+          sugar_g: fusedResult.facts.sugar,
+          sodium_mg: fusedResult.facts.sodium,
+          saturatedFat_g: fusedResult.facts.saturatedFat,
+          totalCarbs_g: getMacro('carbohydrates'),
+          protein_g: getMacro('protein')
+        }
+      };
+
+      const healthProfile = mapAuthProfileToHealthProfile(activeProfile);
+      const evaluation = evaluateFoodSafety(scannedFood, healthProfile);
+
+      setIsAnalyzing(false);
+      setIsCameraActive(false);
+      setResult({ food: scannedFood, evaluation });
 
     } catch (err) {
       console.error(err);
       setIsAnalyzing(false);
       setIsCameraActive(false);
+      alert("OCR Analysis Failed. Ensure @react-native-ml-kit/text-recognition is built correctly into the native client.");
     }
   };
 
@@ -175,7 +191,7 @@ const ScanScreen = ({ navigation }) => {
                 </View>
               </View>
 
-              {result.evaluation.flaggedIngredients.length > 0 && (
+              {result.evaluation.flaggedIngredients && result.evaluation.flaggedIngredients.length > 0 && (
                 <View style={styles.flagsSection}>
                   <Text style={styles.flagsSectionTitle}>Flagged Interactions</Text>
                   {result.evaluation.flaggedIngredients.map((flag, idx) => (
@@ -248,18 +264,13 @@ const ScanScreen = ({ navigation }) => {
   if (isCameraActive) {
     return (
       <View style={styles.cameraContainer}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing="back"
-        >
-          <View style={styles.cameraOverlay}>
-            <Text style={{ color: 'white', marginBottom: hp(2), fontFamily: typography.fonts.semiBold, textAlign: 'center' }}>
-              Align ingredients label within the frame
-            </Text>
-            <View style={styles.scanLabelFrame} />
-          </View>
+        <NutritionScanner 
+          ref={scannerRef}
+          isActive={isCameraActive && !isAnalyzing}
+          onStableDetection={handleStableDetection}
+        />
 
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           <View style={styles.controls}>
             {isAnalyzing ? (
               <View style={styles.analyzingWrapper}>
@@ -267,18 +278,16 @@ const ScanScreen = ({ navigation }) => {
                 <Text style={styles.analyzingText}>Extracting Ingredients...</Text>
               </View>
             ) : (
-              <>
-                <View style={{ width: wp(12) }} />
-                <TouchableOpacity style={styles.captureBtn} onPress={captureAndAnalyze}>
-                  <View style={styles.captureBtnInner} />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.closeBtn} onPress={() => setIsCameraActive(false)}>
-                  <Feather name="x" size={fs(28)} color="#FFFFFF" />
-                </TouchableOpacity>
-              </>
+              <View style={styles.analyzingWrapper}>
+                 <ActivityIndicator size="large" color="#FFF" />
+                 <Text style={styles.analyzingText}>Stabilizing Lens...</Text>
+              </View>
             )}
+            <TouchableOpacity style={styles.closeBtn} onPress={() => setIsCameraActive(false)}>
+               <Feather name="x" size={fs(28)} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
-        </CameraView>
+        </View>
       </View>
     );
   }
@@ -367,50 +376,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  camera: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  cameraOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: wp(6),
-  },
-  scanLabelFrame: {
-    width: '100%',
-    aspectRatio: 4 / 3,
-    borderWidth: 2,
-    borderColor: '#009933',
-    borderRadius: wp(4),
-    backgroundColor: 'transparent',
-  },
   controls: {
+    position: 'absolute',
+    bottom: 0,
+    width: '100%',
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingBottom: hp(5),
     paddingTop: hp(2),
     backgroundColor: 'rgba(0,0,0,0.5)',
     height: hp(18),
   },
-  captureBtn: {
-    width: wp(20),
-    height: wp(20),
-    borderRadius: wp(10),
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  captureBtnInner: {
-    width: wp(16),
-    height: wp(16),
-    borderRadius: wp(8),
-    backgroundColor: '#FFFFFF',
-  },
   closeBtn: {
+    position: 'absolute',
+    right: wp(6),
+    top: hp(6),
     width: wp(12),
     height: wp(12),
     borderRadius: wp(6),

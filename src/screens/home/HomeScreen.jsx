@@ -77,7 +77,7 @@ const HomeScreen = ({ navigation }) => {
             >
               <View style={styles.scanCardImageBox}>
                 <Image
-                  source={require('../../assets/images/veg_fruits.png')}
+                  source={require('../../assets/images/veg_fruits.jpg')}
                   style={styles.scanCardImage}
                   resizeMode="contain"
                 />
@@ -92,7 +92,7 @@ const HomeScreen = ({ navigation }) => {
             >
               <View style={styles.scanCardImageBox}>
                 <Image
-                  source={require('../../assets/images/packed_food.png')}
+                  source={require('../../assets/images/packed_food.jpg')}
                   style={styles.scanCardImage}
                   resizeMode="contain"
                 />

@@ -53,6 +53,8 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+import { TFLiteProvider } from './src/context/TFLiteContext';
+
 export default function App() {
   const [fontsLoaded] = useFonts({
     Outfit_400Regular,
@@ -78,7 +80,9 @@ export default function App() {
       <ErrorBoundary>
         <SafeAreaProvider>
           <AuthProvider>
-            <AppNavigator />
+            <TFLiteProvider>
+              <AppNavigator />
+            </TFLiteProvider>
           </AuthProvider>
         </SafeAreaProvider>
       </ErrorBoundary>
