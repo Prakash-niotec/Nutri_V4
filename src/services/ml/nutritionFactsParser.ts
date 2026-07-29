@@ -455,6 +455,7 @@ export function recoverDecimalValue(
     }
   }
 
+  val = Math.round(val * 100) / 100;
   return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
 }
 

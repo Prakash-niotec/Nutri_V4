@@ -62,7 +62,7 @@ export interface UserHealthProfile {
 }
 
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type Verdict = 'SAFE' | 'CAUTION' | 'AVOID';
+export type Verdict = 'SAFE' | 'UNSAFE' | 'CAUTION' | 'AVOID';
 
 export interface FlaggedIngredient {
     ingredient: string;

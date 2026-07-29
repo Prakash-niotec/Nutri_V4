@@ -265,13 +265,13 @@ export const NutritionScanner = forwardRef<NutritionScannerRef, NutritionScanner
       }
 
       if (bestBox) {
-        if (maxScore >= 0.50) {
+        if (maxScore >= 0.60) {
           consecutiveDetections.value += 1;
         } else {
           consecutiveDetections.value = 0;
         }
 
-        const isStable = consecutiveDetections.value >= 4;
+        const isStable = consecutiveDetections.value >= 6;
         const ori = (frame.orientation as string);
         let orientationStr: Orientation = 'landscape-left';
         if (ori === 'right' || ori === 'portrait') {

@@ -46,17 +46,16 @@ export const aggregateResults = (results: RuleResult[]): HealthEvaluationResult 
 
     if (riskScore > 100) riskScore = 100;
 
-    if (criticalCount > 0 || highCount >= 2 || riskScore >= 60) {
-        overallVerdict = 'AVOID';
-    } else if (highCount === 1 || mediumCount > 0 || riskScore >= 30) {
-        overallVerdict = 'CAUTION';
+    if (criticalCount > 0 || highCount > 0 || mediumCount > 0 || flaggedIngredients.length > 0 || riskScore > 0) {
+        overallVerdict = 'UNSAFE';
+    } else {
+        overallVerdict = 'SAFE';
     }
 
     const summary = criticalCount > 0
         ? `Contains critical allergens: ${Array.from(matchedAllergens).join(', ')}`
-        : overallVerdict === 'AVOID' ? 'High risk due to multiple condition flags or dietary violations.'
-            : overallVerdict === 'CAUTION' ? 'Proceed with caution: Contains moderate risk ingredients.'
-                : 'Safe to consume based on your profile.';
+        : overallVerdict === 'UNSAFE' ? 'Unsafe to consume based on your profile or nutrient thresholds.'
+        : 'Safe to consume based on your profile.';
 
     return {
         overallVerdict,

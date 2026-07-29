@@ -101,6 +101,8 @@ const ScanScreen = ({ navigation }) => {
 
     const healthProfile = mapAuthProfileToHealthProfile(activeProfile);
     const updatedEval = evaluateFoodSafety(updatedFood, healthProfile);
+    const finalVerdict = updatedEval.overallVerdict === 'SAFE' ? 'SAFE' : 'UNSAFE';
+    updatedEval.overallVerdict = finalVerdict;
 
     setResult(prev => ({
       ...prev,
@@ -111,6 +113,12 @@ const ScanScreen = ({ navigation }) => {
     setIsAddModalVisible(false);
     setNewNutrientName('');
     setNewNutrientVal('');
+
+    Alert.alert(
+      "⚡ Re-Evaluation Complete",
+      `Product Safety Verdict: ${finalVerdict}\n\n${updatedEval.summary}`,
+      [{ text: "OK" }]
+    );
   };
 
   const handleEvaluateWholePackage = () => {
@@ -119,11 +127,23 @@ const ScanScreen = ({ navigation }) => {
     if (isNaN(weightGrams) || weightGrams <= 0) return;
 
     const ratio = weightGrams / 100;
-    const wholeItems = (result.food.per100gItems || []).map(item => ({
-      label: item.label,
-      value: Math.round((item.value * ratio) * 10) / 10,
-      unit: item.unit
-    }));
+    const wholeItems = (result.food.per100gItems || []).map(item => {
+      let calcVal = Math.round((item.value * ratio) * 100) / 100;
+      let unitStr = item.unit || '';
+
+      const kjMatch = unitStr.match(/(\d+(?:\.\d+)?)\s*kj/i);
+      if (kjMatch) {
+        const origKj = parseFloat(kjMatch[1]);
+        const wholeKj = Math.round(origKj * ratio);
+        unitStr = unitStr.replace(/\(\s*\d+(?:\.\d+)?\s*kj\s*\)/i, `(${wholeKj} kJ)`);
+      }
+
+      return {
+        label: item.label,
+        value: calcVal,
+        unit: unitStr
+      };
+    });
 
     const wholeFood = {
       ...result.food,
@@ -133,6 +153,7 @@ const ScanScreen = ({ navigation }) => {
 
     const healthProfile = mapAuthProfileToHealthProfile(activeProfile);
     const wholeEval = evaluateFoodSafety(wholeFood, healthProfile);
+    wholeEval.overallVerdict = wholeEval.overallVerdict === 'SAFE' ? 'SAFE' : 'UNSAFE';
 
     setWholePackageEvalResult({
       weightGrams,
@@ -163,6 +184,8 @@ const ScanScreen = ({ navigation }) => {
       }
     }
     setResult(null);
+    setWholePackageEvalResult(null);
+    setPackageWeightInput('1000');
     setIsCameraActive(true);
   };
 
@@ -294,11 +317,11 @@ const ScanScreen = ({ navigation }) => {
         }
       }
 
-      // If Per Serving items were not explicitly listed in table, ONLY calculate if serving size is explicitly present AND not 100g!
+      // 1. If Per Serving items were NOT explicitly printed in table, ONLY calculate if serving size is explicitly present AND not 100g!
       if (perServingItems.length === 0 && per100gItems.length > 0 && servingGrams > 0 && servingGrams !== 100 && cleanedMetadata.servingSize) {
         const ratio = servingGrams / 100;
         perServingItems = per100gItems.map(item => {
-          let calcVal = Math.round((item.value * ratio) * 10) / 10;
+          let calcVal = Math.round((item.value * ratio) * 100) / 100;
           return {
             label: item.label,
             value: calcVal,
@@ -306,6 +329,21 @@ const ScanScreen = ({ navigation }) => {
           };
         });
         isCalculatedPerServing = true;
+      }
+
+      // 2. Per-Serving Column Complete Equality Rule:
+      // If Per Serving items were parsed from OCR but count is significantly less than Per 100g count (<60% or <2),
+      // it means the label did NOT have a real Per Serving column! Merge items & do NOT display Per Serving category.
+      if (!isCalculatedPerServing && perServingItems.length > 0 && per100gItems.length > 0) {
+        const minRequired = Math.max(2, Math.floor(per100gItems.length * 0.60));
+        if (perServingItems.length < minRequired) {
+          perServingItems.forEach(servItem => {
+            if (!per100gItems.some(p => p.label.toLowerCase() === servItem.label.toLowerCase())) {
+              per100gItems.push(servItem);
+            }
+          });
+          perServingItems = [];
+        }
       }
 
       const getMacro = (category) => {
@@ -349,11 +387,25 @@ const ScanScreen = ({ navigation }) => {
           }
         };
         evaluationServing = evaluateFoodSafety(servingFood, healthProfile);
+        evaluationServing.overallVerdict = evaluationServing.overallVerdict === 'SAFE' ? 'SAFE' : 'UNSAFE';
       }
 
       setIsAnalyzing(false);
       setIsCameraActive(false);
       setResult({ food: scannedFood, evaluation, evaluationServing, isCalculatedPerServing });
+
+      // Low-Nutrient Quality Scan Re-Scan Alert (< 3 Nutrients)
+      const totalExtractedCount = per100gItems.length + perServingItems.length;
+      if (totalExtractedCount < 3) {
+        Alert.alert(
+          "⚠️ Low Quality Scan Detected",
+          `Only ${totalExtractedCount} nutrient(s) were detected from this scan. For accurate health safety evaluation, please re-scan with better lighting and a steady angle.`,
+          [
+            { text: "Re-Scan Label", onPress: resetScanner },
+            { text: "View Results Anyway", style: "cancel" }
+          ]
+        );
+      }
 
     } catch (err) {
       console.error(err);
@@ -366,16 +418,16 @@ const ScanScreen = ({ navigation }) => {
 
   const resetScanner = () => {
     setResult(null);
-    setIsCameraActive(false);
+    setWholePackageEvalResult(null);
+    setPackageWeightInput('1000');
+    setIsCameraActive(true);
   };
 
   if (result) {
-    const verdictColor =
-      result.evaluation.overallVerdict === 'SAFE' ? '#2ECC71' :
-        result.evaluation.overallVerdict === 'CAUTION' ? '#F39C12' : '#E74C3C';
-    const verdictIcon =
-      result.evaluation.overallVerdict === 'SAFE' ? 'check-circle' :
-        result.evaluation.overallVerdict === 'CAUTION' ? 'alert-triangle' : 'x-octagon';
+    const isMainSafe = result.evaluation.overallVerdict === 'SAFE';
+    const verdictColor = isMainSafe ? '#2ECC71' : '#E74C3C';
+    const verdictIcon = isMainSafe ? 'check-circle' : 'x-octagon';
+    const verdictTitle = isMainSafe ? 'SAFE' : 'UNSAFE';
 
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -384,7 +436,7 @@ const ScanScreen = ({ navigation }) => {
           <View style={styles.card}>
             <View style={[styles.verdictHeader, { backgroundColor: verdictColor }]}>
               <Feather name={verdictIcon} size={fs(36)} color="#FFF" style={{ marginBottom: hp(1) }} />
-              <Text style={styles.verdictText}>{result.evaluation.overallVerdict}</Text>
+              <Text style={styles.verdictText}>{verdictTitle}</Text>
             </View>
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
@@ -392,13 +444,6 @@ const ScanScreen = ({ navigation }) => {
 
               <View style={styles.summaryContainer}>
                 <Text style={styles.summaryText}>{result.evaluation.summary}</Text>
-              </View>
-
-              <View style={styles.riskRow}>
-                <Text style={styles.riskScoreLabel}>Calculated Risk Score</Text>
-                <View style={[styles.riskScoreBadge, { backgroundColor: verdictColor + '20' }]}>
-                  <Text style={[styles.riskScoreValue, { color: verdictColor }]}>{result.evaluation.riskScore}/100</Text>
-                </View>
               </View>
 
               {/* Product & Serving Details Container */}
@@ -483,14 +528,14 @@ const ScanScreen = ({ navigation }) => {
                       Extracted Nutrition Facts (Per Serving)
                     </Text>
                     {result.evaluationServing && (
-                      <View style={[styles.miniVerdictBadge, { backgroundColor: result.evaluationServing.overallVerdict === 'SAFE' ? '#2ECC7120' : result.evaluationServing.overallVerdict === 'CAUTION' ? '#F39C1220' : '#E74C3C20' }]}>
+                      <View style={[styles.miniVerdictBadge, { backgroundColor: result.evaluationServing.overallVerdict === 'SAFE' ? '#2ECC7120' : '#E74C3C20' }]}>
                         <Feather
-                          name={result.evaluationServing.overallVerdict === 'SAFE' ? 'check-circle' : result.evaluationServing.overallVerdict === 'CAUTION' ? 'alert-triangle' : 'x-octagon'}
+                          name={result.evaluationServing.overallVerdict === 'SAFE' ? 'check-circle' : 'x-octagon'}
                           size={fs(12)}
-                          color={result.evaluationServing.overallVerdict === 'SAFE' ? '#2ECC71' : result.evaluationServing.overallVerdict === 'CAUTION' ? '#F39C12' : '#E74C3C'}
+                          color={result.evaluationServing.overallVerdict === 'SAFE' ? '#2ECC71' : '#E74C3C'}
                           style={{ marginRight: 4 }}
                         />
-                        <Text style={[styles.miniVerdictText, { color: result.evaluationServing.overallVerdict === 'SAFE' ? '#2ECC71' : result.evaluationServing.overallVerdict === 'CAUTION' ? '#D35400' : '#E74C3C' }]}>
+                        <Text style={[styles.miniVerdictText, { color: result.evaluationServing.overallVerdict === 'SAFE' ? '#2ECC71' : '#E74C3C' }]}>
                           {result.evaluationServing.overallVerdict} ({result.food.metadata?.servingSize || 'Per Serving'})
                         </Text>
                       </View>
@@ -517,14 +562,14 @@ const ScanScreen = ({ navigation }) => {
 
               {/* Whole Package Net Weight Evaluation Card */}
               <View style={styles.wholePackageCard}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
                   <Feather name="box" size={fs(18)} color="#009933" style={{ marginRight: 6 }} />
                   <Text style={styles.wholePackageTitle}>Whole Package Net Weight Evaluation</Text>
                 </View>
                 <Text style={styles.wholePackageSub}>
                   Enter full package net weight to calculate health risk if consuming the entire product container:
                 </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 10 }}>
+                <View style={styles.wholePackageInputRow}>
                   <TextInput
                     style={styles.packageInput}
                     value={packageWeightInput}
@@ -532,25 +577,26 @@ const ScanScreen = ({ navigation }) => {
                     keyboardType="numeric"
                     placeholder="e.g. 1000"
                   />
-                  <Text style={{ fontFamily: typography.fonts.bold, fontSize: fs(13), color: '#333', marginLeft: 6, marginRight: 10 }}>
+                  <Text style={styles.packageUnitText}>
                     g / ml
                   </Text>
-                  <TouchableOpacity
-                    style={styles.evalPackageBtn}
-                    onPress={handleEvaluateWholePackage}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.evalPackageBtnText}>Evaluate Whole Package</Text>
-                  </TouchableOpacity>
                 </View>
 
+                <TouchableOpacity
+                  style={styles.evalPackageBtn}
+                  onPress={handleEvaluateWholePackage}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.evalPackageBtnText}>Evaluate Whole Package</Text>
+                </TouchableOpacity>
+
                 {wholePackageEvalResult && (
-                  <View style={[styles.wholeEvalResultBox, { borderColor: wholePackageEvalResult.evaluation.overallVerdict === 'SAFE' ? '#2ECC71' : wholePackageEvalResult.evaluation.overallVerdict === 'CAUTION' ? '#F39C12' : '#E74C3C' }]}>
+                  <View style={[styles.wholeEvalResultBox, { borderColor: wholePackageEvalResult.evaluation.overallVerdict === 'SAFE' ? '#2ECC71' : '#E74C3C' }]}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                       <Text style={{ fontFamily: typography.fonts.bold, fontSize: fs(14), color: '#2C3E50' }}>
                         Full Container ({wholePackageEvalResult.weightGrams}g) Verdict:
                       </Text>
-                      <Text style={{ fontFamily: typography.fonts.bold, fontSize: fs(14), color: wholePackageEvalResult.evaluation.overallVerdict === 'SAFE' ? '#2ECC71' : wholePackageEvalResult.evaluation.overallVerdict === 'CAUTION' ? '#D35400' : '#E74C3C' }}>
+                      <Text style={{ fontFamily: typography.fonts.bold, fontSize: fs(14), color: wholePackageEvalResult.evaluation.overallVerdict === 'SAFE' ? '#2ECC71' : '#E74C3C' }}>
                         {wholePackageEvalResult.evaluation.overallVerdict}
                       </Text>
                     </View>
@@ -1029,6 +1075,12 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: fs(12) * 1.35,
   },
+  wholePackageInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
   packageInput: {
     backgroundColor: '#FFFFFF',
     borderColor: '#CCC',
@@ -1036,20 +1088,29 @@ const styles = StyleSheet.create({
     borderRadius: wp(2),
     paddingHorizontal: wp(3),
     paddingVertical: hp(1),
-    width: wp(24),
+    flex: 1,
     fontFamily: typography.fonts.bold,
     fontSize: fs(14),
     color: '#333',
   },
+  packageUnitText: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(13),
+    color: '#333',
+    marginLeft: 8,
+  },
   evalPackageBtn: {
     backgroundColor: '#009933',
-    paddingHorizontal: wp(3.5),
-    paddingVertical: hp(1.2),
-    borderRadius: wp(2),
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: hp(1.4),
+    borderRadius: wp(2.5),
+    marginTop: 4,
   },
   evalPackageBtnText: {
     fontFamily: typography.fonts.bold,
-    fontSize: fs(13),
+    fontSize: fs(14),
     color: '#FFFFFF',
   },
   wholeEvalResultBox: {
