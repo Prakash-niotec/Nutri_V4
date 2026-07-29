@@ -26,15 +26,21 @@ export const evaluateFoodSafety = (food: DetectedFoodData, profile: UserHealthPr
 
     if (food.allNutrientItems) {
       food.allNutrientItems.forEach(item => {
-        const lowerLabel = (item.label || "").toLowerCase();
-        const isKnown = knownKeys.some(k => lowerLabel.includes(k));
-        if (!isKnown && lowerLabel.length > 2) {
-          unknownNutrientResults.push({
-            ruleId: 'UNRECOGNIZED_NUTRIENT',
-            severity: 'MEDIUM',
-            ingredient: item.label,
-            reason: `⚠️ Unrecognized Nutrient: '${item.label}' is not in our safety evaluation database. Please search details or consult medical guidance before consuming.`,
-          });
+        const rawLabel = item.label || "";
+        const lowerLabel = rawLabel.toLowerCase();
+        const hasNoiseSymbols = /[{}\|<>:~^\\_]/g.test(rawLabel);
+        const isValidAlpha = /^[a-zA-Z0-9\s\-\(\)\.\%]{3,}$/.test(rawLabel.trim());
+
+        if (!hasNoiseSymbols && isValidAlpha) {
+          const isKnown = knownKeys.some(k => lowerLabel.includes(k));
+          if (!isKnown && lowerLabel.length > 2) {
+            unknownNutrientResults.push({
+              ruleId: 'UNRECOGNIZED_NUTRIENT',
+              severity: 'MEDIUM',
+              ingredient: item.label,
+              reason: `⚠️ Unrecognized Nutrient: '${item.label}' is not in our safety evaluation database. Please search details or consult medical guidance before consuming.`,
+            });
+          }
         }
       });
     }

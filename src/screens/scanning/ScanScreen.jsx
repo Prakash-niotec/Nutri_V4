@@ -65,8 +65,10 @@ const ScanScreen = ({ navigation }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState(null);
 
-  // New Feature States: Manual Nutrient Editing & Whole Package Evaluation
+  // New Feature States: Manual Nutrient Editing & Custom App-Themed Alert Modal
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [targetColumn, setTargetColumn] = useState('per100g');
+  const [selectedNutrientKey, setSelectedNutrientKey] = useState('CUSTOM');
   const [newNutrientName, setNewNutrientName] = useState('');
   const [newNutrientVal, setNewNutrientVal] = useState('');
   const [newNutrientUnit, setNewNutrientUnit] = useState('g');
@@ -77,26 +79,109 @@ const ScanScreen = ({ navigation }) => {
   const isCapturingRef = useRef(false);
   const { activeProfile } = useAuth();
 
+  const [customAlert, setCustomAlert] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'success',
+    buttons: [],
+  });
+
+  const showAlert = (title, message, type = 'success', buttons = [{ text: 'OK' }]) => {
+    setCustomAlert({
+      visible: true,
+      title,
+      message,
+      type,
+      buttons,
+    });
+  };
+
+  const closeAlert = () => {
+    setCustomAlert(prev => ({ ...prev, visible: false }));
+  };
+
+  const handleSelectNutrientToEdit = (keyLabel) => {
+    setSelectedNutrientKey(keyLabel);
+    if (keyLabel === 'CUSTOM') {
+      setNewNutrientName('');
+      setNewNutrientVal('');
+      setNewNutrientUnit('g');
+      return;
+    }
+
+    const items = targetColumn === 'per100g' ? (result?.food?.per100gItems || []) : (result?.food?.perServingItems || []);
+    const existing = items.find(i => i.label.toLowerCase() === keyLabel.toLowerCase());
+    if (existing) {
+      setNewNutrientName(existing.label);
+      setNewNutrientVal(existing.value.toString());
+      setNewNutrientUnit(existing.unit ? existing.unit.trim() : 'g');
+    }
+  };
+
   const handleAddNutrient = () => {
     if (!result || !newNutrientName.trim() || !newNutrientVal.trim()) return;
-    const numVal = parseFloat(newNutrientVal.trim());
+    const numVal = Math.round(parseFloat(newNutrientVal.trim()) * 100) / 100;
     if (isNaN(numVal)) return;
 
     const name = newNutrientName.trim();
     const unit = newNutrientUnit.trim();
+    const formattedUnit = unit ? (unit.startsWith(' ') ? unit : ` ${unit}`) : '';
 
-    const updatedPer100g = [...(result.food.per100gItems || [])];
-    const existingIdx = updatedPer100g.findIndex(i => i.label.toLowerCase() === name.toLowerCase());
-    if (existingIdx >= 0) {
-      updatedPer100g[existingIdx] = { label: name, value: numVal, unit: unit ? (unit.startsWith(' ') ? unit : ` ${unit}`) : '' };
+    let updatedPer100g = [...(result.food.per100gItems || [])];
+    let updatedPerServ = [...(result.food.perServingItems || [])];
+
+    // Extract serving size grams (e.g. "20g" -> 20)
+    let servingGrams = 0;
+    if (result.food.metadata?.servingSize) {
+      const gMatch = result.food.metadata.servingSize.match(/(\d+(?:\.\d+)?)\s*(?:g|ml)/i);
+      if (gMatch) servingGrams = parseFloat(gMatch[1]);
+    }
+
+    if (targetColumn === 'per100g') {
+      const existingIdx = updatedPer100g.findIndex(i => i.label.toLowerCase() === name.toLowerCase());
+      if (existingIdx >= 0) {
+        updatedPer100g[existingIdx] = { label: name, value: numVal, unit: formattedUnit };
+      } else {
+        updatedPer100g.push({ label: name, value: numVal, unit: formattedUnit });
+      }
+
+      // Auto-calculate Per Serving from Per 100g
+      if (servingGrams > 0 || updatedPerServ.length > 0) {
+        const ratio = servingGrams > 0 ? (servingGrams / 100) : 0.2;
+        const calcServVal = Math.round((numVal * ratio) * 100) / 100;
+        const servIdx = updatedPerServ.findIndex(i => i.label.toLowerCase() === name.toLowerCase());
+        if (servIdx >= 0) {
+          updatedPerServ[servIdx] = { label: name, value: calcServVal, unit: formattedUnit };
+        } else if (updatedPerServ.length > 0) {
+          updatedPerServ.push({ label: name, value: calcServVal, unit: formattedUnit });
+        }
+      }
     } else {
-      updatedPer100g.push({ label: name, value: numVal, unit: unit ? (unit.startsWith(' ') ? unit : ` ${unit}`) : '' });
+      // Direct Per Serving edit -> Auto-calculate Per 100g!
+      const servIdx = updatedPerServ.findIndex(i => i.label.toLowerCase() === name.toLowerCase());
+      if (servIdx >= 0) {
+        updatedPerServ[servIdx] = { label: name, value: numVal, unit: formattedUnit };
+      } else {
+        updatedPerServ.push({ label: name, value: numVal, unit: formattedUnit });
+      }
+
+      // Auto-calculate Per 100g from Per Serving
+      const ratio = servingGrams > 0 ? (100 / servingGrams) : 5.0;
+      const calc100gVal = Math.round((numVal * ratio) * 100) / 100;
+      const p100Idx = updatedPer100g.findIndex(i => i.label.toLowerCase() === name.toLowerCase());
+      if (p100Idx >= 0) {
+        updatedPer100g[p100Idx] = { label: name, value: calc100gVal, unit: formattedUnit };
+      } else {
+        updatedPer100g.push({ label: name, value: calc100gVal, unit: formattedUnit });
+      }
     }
 
     const updatedFood = {
       ...result.food,
       per100gItems: updatedPer100g,
-      allNutrientItems: updatedPer100g,
+      perServingItems: updatedPerServ,
+      allNutrientItems: updatedPer100g.length > 0 ? updatedPer100g : updatedPerServ,
     };
 
     const healthProfile = mapAuthProfileToHealthProfile(activeProfile);
@@ -104,20 +189,48 @@ const ScanScreen = ({ navigation }) => {
     const finalVerdict = updatedEval.overallVerdict === 'SAFE' ? 'SAFE' : 'UNSAFE';
     updatedEval.overallVerdict = finalVerdict;
 
+    let updatedEvalServ = null;
+    if (updatedPerServ.length > 0) {
+      updatedEvalServ = evaluateFoodSafety({ ...updatedFood, allNutrientItems: updatedPerServ }, healthProfile);
+      updatedEvalServ.overallVerdict = updatedEvalServ.overallVerdict === 'SAFE' ? 'SAFE' : 'UNSAFE';
+    }
+
     setResult(prev => ({
       ...prev,
       food: updatedFood,
-      evaluation: updatedEval
+      evaluation: updatedEval,
+      evaluationServing: updatedEvalServ
     }));
 
+    // Auto-synchronize Whole Package card if currently active!
+    if (wholePackageEvalResult) {
+      const weightGrams = wholePackageEvalResult.weightGrams || parseFloat(packageWeightInput) || 1000;
+      const ratio = weightGrams / 100;
+      const wholeItems = updatedPer100g.map(item => {
+        let calcVal = Math.round((item.value * ratio) * 100) / 100;
+        let unitStr = item.unit || '';
+        const kjMatch = unitStr.match(/(\d+(?:\.\d+)?)\s*kj/i);
+        if (kjMatch) {
+          const origKj = parseFloat(kjMatch[1]);
+          const wholeKj = Math.round(origKj * ratio);
+          unitStr = unitStr.replace(/\(\s*\d+(?:\.\d+)?\s*kj\s*\)/i, `(${wholeKj} kJ)`);
+        }
+        return { label: item.label, value: calcVal, unit: unitStr };
+      });
+      const wholeEval = evaluateFoodSafety({ ...updatedFood, allNutrientItems: wholeItems, per100gItems: wholeItems }, healthProfile);
+      wholeEval.overallVerdict = wholeEval.overallVerdict === 'SAFE' ? 'SAFE' : 'UNSAFE';
+      setWholePackageEvalResult({ weightGrams, evaluation: wholeEval, wholeItems });
+    }
+
     setIsAddModalVisible(false);
+    setSelectedNutrientKey('CUSTOM');
     setNewNutrientName('');
     setNewNutrientVal('');
 
-    Alert.alert(
+    showAlert(
       "⚡ Re-Evaluation Complete",
-      `Product Safety Verdict: ${finalVerdict}\n\n${updatedEval.summary}`,
-      [{ text: "OK" }]
+      `Safety Verdict: ${finalVerdict}\n\n${updatedEval.summary}`,
+      finalVerdict === 'SAFE' ? 'success' : 'error'
     );
   };
 
@@ -523,8 +636,8 @@ const ScanScreen = ({ navigation }) => {
               {/* Per Serving Nutrition Facts (Side-by-side / Secondary Column with Small Verdict Sub-Badge) */}
               {result.food.perServingItems && result.food.perServingItems.length > 0 && (
                 <View style={[styles.macrosSection, { marginTop: 16 }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: hp(1) }}>
-                    <Text style={[styles.flagsSectionTitle, { color: '#2C3E50', marginBottom: 0 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: hp(1) }}>
+                    <Text style={[styles.flagsSectionTitle, { color: '#2C3E50', marginBottom: 0, flex: 1, minWidth: 140 }]}>
                       Extracted Nutrition Facts (Per Serving)
                     </Text>
                     {result.evaluationServing && (
@@ -628,12 +741,60 @@ const ScanScreen = ({ navigation }) => {
         <Modal visible={isAddModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Add / Edit Missing Nutrient</Text>
-              <Text style={styles.modalSub}>Select or type a nutrient name and its numeric value to re-evaluate safety:</Text>
+              <Text style={styles.modalTitle}>Add / Edit Nutrient</Text>
+              <Text style={styles.modalSub}>Select a detected nutrient to edit or type a new nutrient to re-evaluate safety:</Text>
+
+              {/* Column selector */}
+              <View style={styles.columnToggleRow}>
+                <TouchableOpacity
+                  style={[styles.columnToggleBtn, targetColumn === 'per100g' && styles.columnToggleActive]}
+                  onPress={() => setTargetColumn('per100g')}
+                >
+                  <Text style={[styles.columnToggleText, targetColumn === 'per100g' && styles.columnToggleTextActive]}>
+                    Per 100g/ml Basis
+                  </Text>
+                </TouchableOpacity>
+                {result?.food?.perServingItems && result.food.perServingItems.length > 0 && (
+                  <TouchableOpacity
+                    style={[styles.columnToggleBtn, targetColumn === 'perServing' && styles.columnToggleActive]}
+                    onPress={() => setTargetColumn('perServing')}
+                  >
+                    <Text style={[styles.columnToggleText, targetColumn === 'perServing' && styles.columnToggleTextActive]}>
+                      Per Serving
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Detected Nutrients Chips for Quick Selection */}
+              <Text style={{ fontFamily: typography.fonts.bold, fontSize: fs(12), color: '#555', marginTop: 10, marginBottom: 6 }}>
+                Detected Nutrients (Tap to Edit):
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                <TouchableOpacity
+                  style={[styles.nutrientChip, selectedNutrientKey === 'CUSTOM' && styles.nutrientChipActive]}
+                  onPress={() => handleSelectNutrientToEdit('CUSTOM')}
+                >
+                  <Text style={[styles.nutrientChipText, selectedNutrientKey === 'CUSTOM' && styles.nutrientChipTextActive]}>
+                    + New Custom
+                  </Text>
+                </TouchableOpacity>
+                {(targetColumn === 'per100g' ? (result?.food?.per100gItems || []) : (result?.food?.perServingItems || [])).map((item, idx) => (
+                  <TouchableOpacity
+                    key={idx}
+                    style={[styles.nutrientChip, selectedNutrientKey === item.label && styles.nutrientChipActive]}
+                    onPress={() => handleSelectNutrientToEdit(item.label)}
+                  >
+                    <Text style={[styles.nutrientChipText, selectedNutrientKey === item.label && styles.nutrientChipTextActive]}>
+                      {item.label} ({item.value}{item.unit})
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
 
               <TextInput
                 style={styles.modalInput}
-                placeholder="Nutrient Name (e.g. Added Sugar, Trans Fat, Sodium)"
+                placeholder="Nutrient Name (e.g. Added Sugar, Sodium)"
                 placeholderTextColor="#999"
                 value={newNutrientName}
                 onChangeText={setNewNutrientName}
@@ -642,14 +803,14 @@ const ScanScreen = ({ navigation }) => {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 12 }}>
                 <TextInput
                   style={[styles.modalInput, { flex: 1 }]}
-                  placeholder="Amount (e.g. 15.5)"
+                  placeholder="Amount (e.g. 15.34)"
                   placeholderTextColor="#999"
                   value={newNutrientVal}
                   onChangeText={setNewNutrientVal}
                   keyboardType="numeric"
                 />
                 <TextInput
-                  style={[styles.modalInput, { width: 70 }]}
+                  style={[styles.modalInput, { width: 75 }]}
                   placeholder="Unit"
                   placeholderTextColor="#999"
                   value={newNutrientUnit}
@@ -658,12 +819,52 @@ const ScanScreen = ({ navigation }) => {
               </View>
 
               <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 15 }}>
-                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setIsAddModalVisible(false)}>
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => { setIsAddModalVisible(false); setSelectedNutrientKey('CUSTOM'); }}>
                   <Text style={styles.modalCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.modalSaveBtn} onPress={handleAddNutrient}>
                   <Text style={styles.modalSaveText}>⚡ Re-Evaluate Safety</Text>
                 </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Custom NutriLens App-Themed Alert Modal */}
+        <Modal visible={customAlert.visible} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.alertCard}>
+              <View style={[styles.alertIconCircle, { backgroundColor: customAlert.type === 'success' ? '#2ECC7120' : customAlert.type === 'warning' ? '#F39C1220' : '#E74C3C20' }]}>
+                <Feather
+                  name={customAlert.type === 'success' ? 'check-circle' : customAlert.type === 'warning' ? 'alert-triangle' : 'x-octagon'}
+                  size={fs(32)}
+                  color={customAlert.type === 'success' ? '#2ECC71' : customAlert.type === 'warning' ? '#F39C12' : '#E74C3C'}
+                />
+              </View>
+              <Text style={styles.alertTitle}>{customAlert.title}</Text>
+              <Text style={styles.alertMessage}>{customAlert.message}</Text>
+
+              <View style={styles.alertBtnRow}>
+                {customAlert.buttons && customAlert.buttons.length > 0 ? (
+                  customAlert.buttons.map((btn, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={[styles.alertBtn, btn.style === 'cancel' ? styles.alertBtnSecondary : styles.alertBtnPrimary]}
+                      onPress={() => {
+                        closeAlert();
+                        if (btn.onPress) btn.onPress();
+                      }}
+                    >
+                      <Text style={[styles.alertBtnText, btn.style === 'cancel' && styles.alertBtnSecondaryText]}>
+                        {btn.text}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <TouchableOpacity style={styles.alertBtnPrimary} onPress={closeAlert}>
+                    <Text style={styles.alertBtnText}>OK</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           </View>
@@ -1179,6 +1380,111 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bold,
     fontSize: fs(13),
     color: '#FFFFFF',
+  },
+  columnToggleRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F0F4F8',
+    borderRadius: wp(2),
+    padding: 3,
+    marginBottom: 8,
+  },
+  columnToggleBtn: {
+    flex: 1,
+    paddingVertical: hp(0.8),
+    alignItems: 'center',
+    borderRadius: wp(1.8),
+  },
+  columnToggleActive: {
+    backgroundColor: '#009933',
+  },
+  columnToggleText: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(12),
+    color: '#555',
+  },
+  columnToggleTextActive: {
+    color: '#FFFFFF',
+  },
+  nutrientChip: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#C8E6C9',
+    borderWidth: 1,
+    borderRadius: wp(4),
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(0.6),
+    marginRight: 6,
+  },
+  nutrientChipActive: {
+    backgroundColor: '#009933',
+    borderColor: '#009933',
+  },
+  nutrientChipText: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(11),
+    color: '#2E7D32',
+  },
+  nutrientChipTextActive: {
+    color: '#FFFFFF',
+  },
+  alertCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: wp(4),
+    padding: wp(6),
+    width: '100%',
+    maxWidth: 380,
+    alignItems: 'center',
+    elevation: 8,
+  },
+  alertIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  alertTitle: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(17),
+    color: '#2C3E50',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  alertMessage: {
+    fontFamily: typography.fonts.regular,
+    fontSize: fs(13),
+    color: '#555',
+    textAlign: 'center',
+    lineHeight: fs(13) * 1.4,
+    marginBottom: 18,
+  },
+  alertBtnRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    width: '100%',
+  },
+  alertBtn: {
+    paddingVertical: hp(1.2),
+    paddingHorizontal: wp(4),
+    borderRadius: wp(2.5),
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  alertBtnPrimary: {
+    backgroundColor: '#009933',
+  },
+  alertBtnSecondary: {
+    backgroundColor: '#F0F0F0',
+  },
+  alertBtnText: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(13),
+    color: '#FFFFFF',
+  },
+  alertBtnSecondaryText: {
+    color: '#666666',
   },
 });
 
