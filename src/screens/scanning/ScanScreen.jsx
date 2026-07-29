@@ -23,6 +23,7 @@ import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { NutritionScanner } from '../../components/scanning/NutritionScanner';
 import { fuseOcrResults } from '../../services/ml/ocrFusion';
 import { normalizeOcrIngredients } from '../../services/nutrition/ingredientDatabase';
+import { enhanceImageForOcr, cleanTempEnhancedFiles } from '../../services/ml/imageEnhancer';
 
 // Adapter to map AuthContext user profile format to Health Engine format
 const mapAuthProfileToHealthProfile = (authProfile) => {
@@ -314,10 +315,18 @@ const ScanScreen = ({ navigation }) => {
         try {
           const snapshot = await scannerRef.current.takeSnapshot();
           if (snapshot && snapshot.path) {
-            const imageUri = snapshot.path.startsWith('file://') ? snapshot.path : `file://${snapshot.path}`;
-            const textResult = await TextRecognition.recognize(imageUri);
-            if (textResult && textResult.text && textResult.text.trim().length > 0) {
-              ocrResults.push(textResult);
+            const rawUri = snapshot.path.startsWith('file://') ? snapshot.path : `file://${snapshot.path}`;
+            let enhancedUri = rawUri;
+            try {
+              enhancedUri = await enhanceImageForOcr(rawUri, snapshot.details);
+              const textResult = await TextRecognition.recognize(enhancedUri);
+              if (textResult && textResult.text && textResult.text.trim().length > 0) {
+                ocrResults.push(textResult);
+              }
+            } finally {
+              if (enhancedUri !== rawUri) {
+                cleanTempEnhancedFiles(enhancedUri).catch(() => {});
+              }
             }
           }
         } catch (sErr) {

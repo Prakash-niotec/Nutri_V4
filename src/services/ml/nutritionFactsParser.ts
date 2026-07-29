@@ -71,6 +71,7 @@ export interface SpatialRow {
 export type NutrientCategory =
   | "calories"
   | "sugar"
+  | "addedSugar"
   | "sodium"
   | "saturatedFat"
   | "totalFat"
@@ -163,14 +164,14 @@ export const CANONICAL_KEYS: CanonicalKeyDef[] = [
     aliases: ["total carbohydrate", "total carbohydrates", "tota carbohyarate", "carbohyarate", "carbohydrat", "carbohydrates", "carbs", "glucides"],
   },
   {
-    canonicalName: "Added Sugar",
-    category: "sugar",
-    aliases: ["added sugar", "added sugars", "of which added sugars", "includes added sugars", "added"],
-  },
-  {
     canonicalName: "Total Sugar",
     category: "sugar",
-    aliases: ["total sugar", "total sugars", "tota suga", "tota sugar", "sugars", "naturaly accuing", "naturally occurring sugar", "sucre", "azucares"],
+    aliases: ["total sugar", "total sugars", "sugars", "sugar", "of which sugars", "sugars (g)", "total sugars (g)", "total sugar (g)", "suga", "sugr", "tota suga", "tota sugar", "naturaly accuing", "naturally occurring sugar", "sucre", "azucares"],
+  },
+  {
+    canonicalName: "Added Sugar",
+    category: "addedSugar",
+    aliases: ["added sugar", "added sugars", "of which added sugars", "includes added sugars", "added"],
   },
   {
     canonicalName: "Total Milk Fat",
@@ -394,24 +395,11 @@ export function recoverDecimalValue(
     }
   }
 
-  // 2. Fix unit 'g' read as '9' or '8' on single-decimal numbers (e.g. 3.59g -> 3.5g, 1.29g -> 1.2g)
+  // 2. Fix 3-decimal OCR noise artifacts (e.g. 2.339 -> 2.33) while preserving 2-decimal numbers (e.g. 5.39g, 2.49g, 1.89g, 0.18g)
   const valStr = val.toString();
   if (valStr.includes(".")) {
     const parts = valStr.split(".");
-    const rawClean = rawStr.trim().toLowerCase();
-    if (parts[1].length === 2 && (parts[1].endsWith("9") || parts[1].endsWith("8"))) {
-      const firstDecimalDigit = parseInt(parts[1].substring(0, 1), 10);
-      const secondDecimalDigit = parseInt(parts[1].substring(1, 2), 10);
-      if ((secondDecimalDigit === 9 || secondDecimalDigit === 8) && (rawClean.includes("g") || !unitStr || unitStr === "g")) {
-        // Exclude legitimate 2-decimal values like 0.18, 0.25, 0.75 unless rawStr explicitly had '9g'
-        if (!(parts[0] === "0" && (firstDecimalDigit === 1 || firstDecimalDigit === 2 || firstDecimalDigit === 7) && secondDecimalDigit === 8)) {
-          const fixed = parseFloat(`${parts[0]}.${parts[1].substring(0, 1)}`);
-          if (!isNaN(fixed)) {
-            val = fixed;
-          }
-        }
-      }
-    } else if (parts[1].length === 3 && (parts[1].endsWith("9") || parts[1].endsWith("8"))) {
+    if (parts[1].length === 3 && (parts[1].endsWith("9") || parts[1].endsWith("8"))) {
       const fixed = parseFloat(`${parts[0]}.${parts[1].substring(0, 2)}`);
       if (!isNaN(fixed)) {
         val = fixed;
@@ -419,12 +407,31 @@ export function recoverDecimalValue(
     }
   }
 
-  // 3. OCR Fix: Added Sugar '9' misrecognized from '0g' or '0'
-  if (lowerKey.includes("added sugar")) {
-    if (val === 9 && (rawStr.trim() === "9" || rawStr.trim() === "9g")) {
+  // 3. Universal Zero-Value OCR Guard across ALL nutrients (Trans Fat, Added Sugar, Sat Fat, Sodium, Fiber, Cholesterol, etc.)
+  const rawLower = rawStr.trim().toLowerCase();
+  if (
+    rawLower.includes("0.0") ||
+    rawLower.includes("0.00") ||
+    rawLower.includes("0g") ||
+    rawLower.includes("0 g") ||
+    rawLower.includes("0mg") ||
+    rawLower.includes("0 mg") ||
+    rawLower === "0" ||
+    rawLower === "0.0"
+  ) {
+    if (val === 9 || val === 0.09 || val === 0.08 || val === 8 || val === 0.0) {
       val = 0;
-      finalUnit = "g";
-      return { val, unitStr: finalUnit, rawStr: "0 g" };
+      finalUnit = finalUnit || "g";
+      return { val, unitStr: finalUnit, rawStr: `0 ${finalUnit}` };
+    }
+  }
+
+  // OCR Fix for Added Sugar '9' misrecognized from '0' or '9g'
+  if (lowerKey.includes("added sugar") || lowerKey.includes("trans")) {
+    if (val === 9 && (rawLower === "9" || rawLower === "9g")) {
+      val = 0;
+      finalUnit = finalUnit || "g";
+      return { val, unitStr: finalUnit, rawStr: `0 ${finalUnit}` };
     }
   }
 
@@ -719,7 +726,8 @@ export const NON_NUTRIENT_HEADER_PATTERNS = [
 
 const KEYWORD_MAP: Record<NutrientCategory, string[]> = {
   calories: ["calories", "energy", "energia", "kcal", "kj"],
-  sugar: ["of which sugars", "sugars", "total sugars", "sugar", "sucre", "azucares", "naturally occurring sugar"],
+  sugar: ["total sugars", "total sugar", "sugars", "sugar", "of which sugars", "sugars (g)", "sucre", "azucares", "naturally occurring sugar"],
+  addedSugar: ["added sugar", "added sugars", "added"],
   sodium: ["sodium", "salt", "sal", "sel", "na", "sodium (na)"],
   saturatedFat: ["of which saturates", "saturated fat", "saturated fatty acids", "saturated", "sat fat", "sat. fat", "acides gras satures"],
   totalFat: ["total fat", "fat", "lipides", "grasas", "fat/lipides", "total milk fat", "milk fat"],
@@ -1050,6 +1058,10 @@ export function parseNutritionTableSpatial(result: TextRecognitionResult): Parse
   });
 
   const getCategoryVal = (cat: NutrientCategory): number | undefined => {
+    if (cat === "sugar") {
+      const totalItem = items.find(i => (i.rawKey && i.rawKey.toLowerCase().includes("sugar")) || i.normalizedKey === "sugar");
+      if (totalItem) return totalItem.numericValue;
+    }
     const item = items.find(i => i.normalizedKey === cat);
     return item ? item.numericValue : undefined;
   };
@@ -1164,7 +1176,7 @@ function parseNutritionFactsFromStringFallback(rawText: string): NutritionFacts 
     }
   }
 
-  sugar = findValueNearKeyword(["of which sugars", "sugars", "sugar"], lowerText);
+  sugar = findValueNearKeyword(["total sugars", "total sugar", "sugars (g)", "of which sugars", "sugars", "sugar"], lowerText);
   sodium = findValueNearKeyword(["sodium", "salt"], lowerText, true);
   saturatedFat = findValueNearKeyword(["of which saturates", "saturated fat", "saturated", "sat fat"], lowerText);
   totalFat = findValueNearKeyword(["total fat", "fat"], lowerText);
