@@ -649,7 +649,7 @@ const ScanScreen = ({ navigation }) => {
                           style={{ marginRight: 4 }}
                         />
                         <Text style={[styles.miniVerdictText, { color: result.evaluationServing.overallVerdict === 'SAFE' ? '#2ECC71' : '#E74C3C' }]}>
-                          {result.evaluationServing.overallVerdict} ({result.food.metadata?.servingSize || 'Per Serving'})
+                          {result.evaluationServing.overallVerdict}
                         </Text>
                       </View>
                     )}

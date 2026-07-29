@@ -348,6 +348,7 @@ export function sanitizeOcrToken(text: string): string {
   let cleaned = text.trim();
 
   cleaned = cleaned.replace(/(\d),(\d)/g, "$1.$2");
+  cleaned = cleaned.replace(/(\d)[·°'`\s](\d)/g, "$1.$2");
   cleaned = cleaned.replace(/(^|\b)[OoQ](?=g\b|mg\b|mcg\b|µg\b|ug\b|\d|\.|\b)/gi, "0");
   cleaned = cleaned.replace(/(\d)[OoQ]/gi, "$10");
   cleaned = cleaned.replace(/(^|\b)[Ss](?=g\b|mg\b|mcg\b|µg\b|ug\b|\d|\.)/g, "5");
@@ -393,14 +394,22 @@ export function recoverDecimalValue(
     }
   }
 
-  // 2. Fix trailing OCR '9' artifact on decimal numbers (e.g. 3.79 -> 3.7, 0.09 -> 0.0, 2.339 -> 2.33)
+  // 2. Fix unit 'g' read as '9' or '8' on single-decimal numbers (e.g. 3.59g -> 3.5g, 1.29g -> 1.2g)
   const valStr = val.toString();
   if (valStr.includes(".")) {
     const parts = valStr.split(".");
+    const rawClean = rawStr.trim().toLowerCase();
     if (parts[1].length === 2 && (parts[1].endsWith("9") || parts[1].endsWith("8"))) {
-      const fixed = parseFloat(`${parts[0]}.${parts[1].substring(0, 1)}`);
-      if (!isNaN(fixed)) {
-        val = fixed;
+      const firstDecimalDigit = parseInt(parts[1].substring(0, 1), 10);
+      const secondDecimalDigit = parseInt(parts[1].substring(1, 2), 10);
+      if ((secondDecimalDigit === 9 || secondDecimalDigit === 8) && (rawClean.includes("g") || !unitStr || unitStr === "g")) {
+        // Exclude legitimate 2-decimal values like 0.18, 0.25, 0.75 unless rawStr explicitly had '9g'
+        if (!(parts[0] === "0" && (firstDecimalDigit === 1 || firstDecimalDigit === 2 || firstDecimalDigit === 7) && secondDecimalDigit === 8)) {
+          const fixed = parseFloat(`${parts[0]}.${parts[1].substring(0, 1)}`);
+          if (!isNaN(fixed)) {
+            val = fixed;
+          }
+        }
       }
     } else if (parts[1].length === 3 && (parts[1].endsWith("9") || parts[1].endsWith("8"))) {
       const fixed = parseFloat(`${parts[0]}.${parts[1].substring(0, 2)}`);
@@ -432,10 +441,23 @@ export function recoverDecimalValue(
     }
   }
 
-  // 5. OCR Fix: Missing decimal dot on 3-digit and 4-digit numbers (e.g. '1146' -> 11.46g, '573' -> 57.3g, '316' -> 31.6g, '233' -> 2.33g)
-  if (val > 100 && !rawStr.includes(".") && !rawStr.includes(",")) {
-    const isMacroKey = lowerKey.includes("fiber") || lowerKey.includes("fibre") || lowerKey.includes("fat") || lowerKey.includes("sugar") || lowerKey.includes("protein") || lowerKey.includes("carb") || lowerKey.includes("sat");
-    if (isMacroKey) {
+  // 5. OCR Fix: Missing decimal dot on 2-digit, 3-digit, and 4-digit numbers (e.g. '79' -> 7.9g, '1146' -> 11.46g, '573' -> 57.3g)
+  if (!rawStr.includes(".") && !rawStr.includes(",")) {
+    const isSatOrTransOrFiber = lowerKey.includes("sat") || lowerKey.includes("trans") || lowerKey.includes("fiber") || lowerKey.includes("fibre");
+    if (isSatOrTransOrFiber && val >= 25 && val <= 99) {
+      val = Math.round((val / 10) * 100) / 100;
+      finalUnit = finalUnit || "g";
+      return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
+    }
+
+    const isMacroKey = lowerKey.includes("sugar") || lowerKey.includes("protein") || lowerKey.includes("fat") || lowerKey.includes("carb");
+    if (isMacroKey && val >= 50 && val <= 99) {
+      val = Math.round((val / 10) * 100) / 100;
+      finalUnit = finalUnit || "g";
+      return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
+    }
+
+    if (val > 100 && isMacroKey) {
       const str = val.toString();
       if (str.length === 4) {
         const floatVal = parseFloat(str.substring(0, 2) + "." + str.substring(2));
