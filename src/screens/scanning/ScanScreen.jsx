@@ -8,7 +8,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Linking
+  Linking,
+  Modal,
+  TextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -63,8 +65,81 @@ const ScanScreen = ({ navigation }) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState(null);
 
+  // New Feature States: Manual Nutrient Editing & Whole Package Evaluation
+  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [newNutrientName, setNewNutrientName] = useState('');
+  const [newNutrientVal, setNewNutrientVal] = useState('');
+  const [newNutrientUnit, setNewNutrientUnit] = useState('g');
+  const [packageWeightInput, setPackageWeightInput] = useState('1000');
+  const [wholePackageEvalResult, setWholePackageEvalResult] = useState(null);
+
   const scannerRef = useRef(null);
+  const isCapturingRef = useRef(false);
   const { activeProfile } = useAuth();
+
+  const handleAddNutrient = () => {
+    if (!result || !newNutrientName.trim() || !newNutrientVal.trim()) return;
+    const numVal = parseFloat(newNutrientVal.trim());
+    if (isNaN(numVal)) return;
+
+    const name = newNutrientName.trim();
+    const unit = newNutrientUnit.trim();
+
+    const updatedPer100g = [...(result.food.per100gItems || [])];
+    const existingIdx = updatedPer100g.findIndex(i => i.label.toLowerCase() === name.toLowerCase());
+    if (existingIdx >= 0) {
+      updatedPer100g[existingIdx] = { label: name, value: numVal, unit: unit ? (unit.startsWith(' ') ? unit : ` ${unit}`) : '' };
+    } else {
+      updatedPer100g.push({ label: name, value: numVal, unit: unit ? (unit.startsWith(' ') ? unit : ` ${unit}`) : '' });
+    }
+
+    const updatedFood = {
+      ...result.food,
+      per100gItems: updatedPer100g,
+      allNutrientItems: updatedPer100g,
+    };
+
+    const healthProfile = mapAuthProfileToHealthProfile(activeProfile);
+    const updatedEval = evaluateFoodSafety(updatedFood, healthProfile);
+
+    setResult(prev => ({
+      ...prev,
+      food: updatedFood,
+      evaluation: updatedEval
+    }));
+
+    setIsAddModalVisible(false);
+    setNewNutrientName('');
+    setNewNutrientVal('');
+  };
+
+  const handleEvaluateWholePackage = () => {
+    if (!result || !packageWeightInput.trim()) return;
+    const weightGrams = parseFloat(packageWeightInput.trim());
+    if (isNaN(weightGrams) || weightGrams <= 0) return;
+
+    const ratio = weightGrams / 100;
+    const wholeItems = (result.food.per100gItems || []).map(item => ({
+      label: item.label,
+      value: Math.round((item.value * ratio) * 10) / 10,
+      unit: item.unit
+    }));
+
+    const wholeFood = {
+      ...result.food,
+      allNutrientItems: wholeItems,
+      per100gItems: wholeItems,
+    };
+
+    const healthProfile = mapAuthProfileToHealthProfile(activeProfile);
+    const wholeEval = evaluateFoodSafety(wholeFood, healthProfile);
+
+    setWholePackageEvalResult({
+      weightGrams,
+      evaluation: wholeEval,
+      wholeItems
+    });
+  };
 
   React.useEffect(() => {
     navigation.setOptions({
@@ -92,7 +167,8 @@ const ScanScreen = ({ navigation }) => {
   };
 
   const handleStableDetection = async () => {
-    if (!scannerRef.current) return;
+    if (isCapturingRef.current || !scannerRef.current) return;
+    isCapturingRef.current = true;
     setIsAnalyzing(true);
 
     try {
@@ -104,18 +180,21 @@ const ScanScreen = ({ navigation }) => {
           if (snapshot && snapshot.path) {
             const imageUri = snapshot.path.startsWith('file://') ? snapshot.path : `file://${snapshot.path}`;
             const textResult = await TextRecognition.recognize(imageUri);
-            if (textResult && textResult.text) {
+            if (textResult && textResult.text && textResult.text.trim().length > 0) {
               ocrResults.push(textResult);
             }
           }
         } catch (sErr) {
           console.warn("Snapshot capture warning:", sErr);
         }
-        if (i < 1) await new Promise(r => setTimeout(r, 120));
+        if (ocrResults.length > 0) break; // As soon as 1 valid snapshot succeeds, proceed!
+        if (i < 1) await new Promise(r => setTimeout(r, 150));
       }
 
       if (ocrResults.length === 0) {
-        throw new Error("Failed to capture images.");
+        console.warn("[NutritionScanner] Camera snapshot returned empty OCR result.");
+        setIsAnalyzing(false);
+        return;
       }
 
       const fusedResult = fuseOcrResults(ocrResults);
@@ -158,13 +237,19 @@ const ScanScreen = ({ navigation }) => {
           if (label.toLowerCase().includes('energy')) {
             const rawStr = item.rawValueStr || '';
             const kjMatch = rawStr.match(/(\d+(?:\.\d+)?)\s*kj/i);
-            if (unit.toLowerCase() === 'kj' || kjMatch) {
-              const origKj = kjMatch ? Math.round(parseFloat(kjMatch[1])) : Math.round(val);
-              const kcalVal = Math.round(origKj / 4.184);
+            if (kjMatch) {
+              const localKj = Math.round(parseFloat(kjMatch[1]));
+              const kcalVal = Math.round(localKj / 4.184);
               label = 'Energy';
               val = kcalVal;
-              unit = `kcal (${origKj} kJ)`;
-            } else if (!unit) {
+              unit = `kcal (${localKj} kJ)`;
+            } else if (unit.toLowerCase() === 'kj') {
+              const kcalVal = Math.round(val / 4.184);
+              label = 'Energy';
+              unit = `kcal (${Math.round(val)} kJ)`;
+              val = kcalVal;
+            } else {
+              label = 'Energy';
               unit = 'kcal';
             }
           }
@@ -209,8 +294,8 @@ const ScanScreen = ({ navigation }) => {
         }
       }
 
-      // If Per Serving items were not explicitly listed in table, ONLY calculate if serving size is known!
-      if (perServingItems.length === 0 && per100gItems.length > 0 && servingGrams > 0) {
+      // If Per Serving items were not explicitly listed in table, ONLY calculate if serving size is explicitly present AND not 100g!
+      if (perServingItems.length === 0 && per100gItems.length > 0 && servingGrams > 0 && servingGrams !== 100 && cleanedMetadata.servingSize) {
         const ratio = servingGrams / 100;
         perServingItems = per100gItems.map(item => {
           let calcVal = Math.round((item.value * ratio) * 10) / 10;
@@ -274,7 +359,8 @@ const ScanScreen = ({ navigation }) => {
       console.error(err);
       setIsAnalyzing(false);
       setIsCameraActive(false);
-      alert("OCR Analysis Failed. Ensure @react-native-ml-kit/text-recognition is built correctly into the native client.");
+    } finally {
+      isCapturingRef.current = false;
     }
   };
 
@@ -381,6 +467,11 @@ const ScanScreen = ({ navigation }) => {
                       </View>
                     ))}
                   </View>
+
+                  <TouchableOpacity style={styles.addNutrientBtn} onPress={() => setIsAddModalVisible(true)} activeOpacity={0.8}>
+                    <Feather name="plus-circle" size={fs(15)} color="#009933" style={{ marginRight: 6 }} />
+                    <Text style={styles.addNutrientText}>Add / Edit Missing Nutrient</Text>
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -423,6 +514,60 @@ const ScanScreen = ({ navigation }) => {
                   </View>
                 </View>
               )}
+
+              {/* Whole Package Net Weight Evaluation Card */}
+              <View style={styles.wholePackageCard}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                  <Feather name="box" size={fs(18)} color="#009933" style={{ marginRight: 6 }} />
+                  <Text style={styles.wholePackageTitle}>Whole Package Net Weight Evaluation</Text>
+                </View>
+                <Text style={styles.wholePackageSub}>
+                  Enter full package net weight to calculate health risk if consuming the entire product container:
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 10 }}>
+                  <TextInput
+                    style={styles.packageInput}
+                    value={packageWeightInput}
+                    onChangeText={setPackageWeightInput}
+                    keyboardType="numeric"
+                    placeholder="e.g. 1000"
+                  />
+                  <Text style={{ fontFamily: typography.fonts.bold, fontSize: fs(13), color: '#333', marginLeft: 6, marginRight: 10 }}>
+                    g / ml
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.evalPackageBtn}
+                    onPress={handleEvaluateWholePackage}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.evalPackageBtnText}>Evaluate Whole Package</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {wholePackageEvalResult && (
+                  <View style={[styles.wholeEvalResultBox, { borderColor: wholePackageEvalResult.evaluation.overallVerdict === 'SAFE' ? '#2ECC71' : wholePackageEvalResult.evaluation.overallVerdict === 'CAUTION' ? '#F39C12' : '#E74C3C' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <Text style={{ fontFamily: typography.fonts.bold, fontSize: fs(14), color: '#2C3E50' }}>
+                        Full Container ({wholePackageEvalResult.weightGrams}g) Verdict:
+                      </Text>
+                      <Text style={{ fontFamily: typography.fonts.bold, fontSize: fs(14), color: wholePackageEvalResult.evaluation.overallVerdict === 'SAFE' ? '#2ECC71' : wholePackageEvalResult.evaluation.overallVerdict === 'CAUTION' ? '#D35400' : '#E74C3C' }}>
+                        {wholePackageEvalResult.evaluation.overallVerdict}
+                      </Text>
+                    </View>
+                    <Text style={{ fontFamily: typography.fonts.regular, fontSize: fs(13), color: '#555', marginBottom: 8, lineHeight: fs(13) * 1.4 }}>
+                      {wholePackageEvalResult.evaluation.summary}
+                    </Text>
+                    <View style={styles.macrosGrid}>
+                      {wholePackageEvalResult.wholeItems.map((item, idx) => (
+                        <View key={idx} style={[styles.macroBadge, { backgroundColor: '#FFF3E0' }]}>
+                          <Text style={styles.macroLabel}>{item.label}</Text>
+                          <Text style={styles.macroValue}>{item.value}{item.unit}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
             </ScrollView>
           </View>
           <View style={styles.actionRow}>
@@ -432,6 +577,51 @@ const ScanScreen = ({ navigation }) => {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Add / Edit Missing Nutrient Modal */}
+        <Modal visible={isAddModalVisible} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Add / Edit Missing Nutrient</Text>
+              <Text style={styles.modalSub}>Select or type a nutrient name and its numeric value to re-evaluate safety:</Text>
+
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Nutrient Name (e.g. Added Sugar, Trans Fat, Sodium)"
+                placeholderTextColor="#999"
+                value={newNutrientName}
+                onChangeText={setNewNutrientName}
+              />
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 12 }}>
+                <TextInput
+                  style={[styles.modalInput, { flex: 1 }]}
+                  placeholder="Amount (e.g. 15.5)"
+                  placeholderTextColor="#999"
+                  value={newNutrientVal}
+                  onChangeText={setNewNutrientVal}
+                  keyboardType="numeric"
+                />
+                <TextInput
+                  style={[styles.modalInput, { width: 70 }]}
+                  placeholder="Unit"
+                  placeholderTextColor="#999"
+                  value={newNutrientUnit}
+                  onChangeText={setNewNutrientUnit}
+                />
+              </View>
+
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 15 }}>
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setIsAddModalVisible(false)}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalSaveBtn} onPress={handleAddNutrient}>
+                  <Text style={styles.modalSaveText}>⚡ Re-Evaluate Safety</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -802,6 +992,132 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     width: '100%',
+  },
+  addNutrientBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    backgroundColor: '#E8F5E9',
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(0.8),
+    borderRadius: wp(4),
+    borderColor: '#C8E6C9',
+    borderWidth: 1,
+  },
+  addNutrientText: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(13),
+    color: '#009933',
+  },
+  wholePackageCard: {
+    backgroundColor: '#FAFAFA',
+    borderColor: '#E0E0E0',
+    borderWidth: 1,
+    borderRadius: wp(3),
+    padding: wp(4),
+    marginTop: 16,
+  },
+  wholePackageTitle: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(15),
+    color: '#2C3E50',
+  },
+  wholePackageSub: {
+    fontFamily: typography.fonts.regular,
+    fontSize: fs(12),
+    color: '#666',
+    lineHeight: fs(12) * 1.35,
+  },
+  packageInput: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#CCC',
+    borderWidth: 1,
+    borderRadius: wp(2),
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(1),
+    width: wp(24),
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(14),
+    color: '#333',
+  },
+  evalPackageBtn: {
+    backgroundColor: '#009933',
+    paddingHorizontal: wp(3.5),
+    paddingVertical: hp(1.2),
+    borderRadius: wp(2),
+  },
+  evalPackageBtnText: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(13),
+    color: '#FFFFFF',
+  },
+  wholeEvalResultBox: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderRadius: wp(2.5),
+    padding: wp(3),
+    marginTop: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: wp(5),
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: wp(4),
+    padding: wp(5),
+    width: '100%',
+    maxWidth: 400,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(18),
+    color: '#2C3E50',
+    marginBottom: 4,
+  },
+  modalSub: {
+    fontFamily: typography.fonts.regular,
+    fontSize: fs(12),
+    color: '#666',
+    marginBottom: 12,
+  },
+  modalInput: {
+    backgroundColor: '#F8F9FA',
+    borderColor: '#DDD',
+    borderWidth: 1,
+    borderRadius: wp(2),
+    paddingHorizontal: wp(3),
+    paddingVertical: hp(1.2),
+    fontFamily: typography.fonts.medium,
+    fontSize: fs(14),
+    color: '#333',
+  },
+  modalCancelBtn: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.2),
+    borderRadius: wp(2),
+    backgroundColor: '#F0F0F0',
+  },
+  modalCancelText: {
+    fontFamily: typography.fonts.medium,
+    fontSize: fs(13),
+    color: '#666',
+  },
+  modalSaveBtn: {
+    paddingHorizontal: wp(4),
+    paddingVertical: hp(1.2),
+    borderRadius: wp(2),
+    backgroundColor: '#009933',
+  },
+  modalSaveText: {
+    fontFamily: typography.fonts.bold,
+    fontSize: fs(13),
+    color: '#FFFFFF',
   },
 });
 

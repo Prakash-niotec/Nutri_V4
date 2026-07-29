@@ -298,6 +298,14 @@ export function fuzzyMatchKeyName(rawKey: string): { canonicalName: string; cate
   const cleaned = cleanKeyName(rawKey).toLowerCase();
   if (cleaned.length <= 1) return null;
 
+  // Direct Keyword Matching for Saturated Fat & Trans Fat sub-indented rows
+  if (cleaned.includes("saturated") || cleaned.includes("saturates")) {
+    return { canonicalName: "Saturated Fat", category: "saturatedFat" };
+  }
+  if (cleaned.includes("trans fat") || cleaned.includes("trans fatty") || cleaned.includes("trans-fat") || cleaned.includes("transfat")) {
+    return { canonicalName: "Trans Fat", category: "transFat" };
+  }
+
   for (const def of CANONICAL_KEYS) {
     for (const alias of def.aliases) {
       if (cleaned === alias) {
@@ -424,14 +432,25 @@ export function recoverDecimalValue(
     }
   }
 
-  // 5. OCR Fix: '410' or '233' read without decimal point
+  // 5. OCR Fix: Missing decimal dot on 3-digit and 4-digit numbers (e.g. '1146' -> 11.46g, '573' -> 57.3g, '316' -> 31.6g, '233' -> 2.33g)
   if (val > 100 && !rawStr.includes(".") && !rawStr.includes(",")) {
-    if (lowerKey.includes("fiber") || lowerKey.includes("fibre") || lowerKey.includes("fat") || lowerKey.includes("sugar") || lowerKey.includes("protein") || lowerKey.includes("carb") || lowerKey.includes("mineral")) {
-      const floatVal = val / 10;
-      if (floatVal < 100) {
-        val = floatVal;
-        finalUnit = finalUnit || "g";
-        return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
+    const isMacroKey = lowerKey.includes("fiber") || lowerKey.includes("fibre") || lowerKey.includes("fat") || lowerKey.includes("sugar") || lowerKey.includes("protein") || lowerKey.includes("carb") || lowerKey.includes("sat");
+    if (isMacroKey) {
+      const str = val.toString();
+      if (str.length === 4) {
+        const floatVal = parseFloat(str.substring(0, 2) + "." + str.substring(2));
+        if (!isNaN(floatVal) && floatVal <= 100) {
+          val = floatVal;
+          finalUnit = finalUnit || "g";
+          return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
+        }
+      } else if (str.length === 3) {
+        const floatVal = val / 10;
+        if (floatVal <= 100) {
+          val = floatVal;
+          finalUnit = finalUnit || "g";
+          return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
+        }
       }
     }
   }
@@ -930,6 +949,11 @@ export function parseNutritionTableSpatial(result: TextRecognitionResult): Parse
       let keyName = cleanKeyName(rawKeyStr);
       let categoryOverride: NutrientCategory | undefined;
 
+      if (!keyName && k > 0 && primaryRowKey) {
+        keyName = primaryRowKey;
+        categoryOverride = primaryCategoryOverride;
+      }
+
       const fuzzyRes = fuzzyMatchKeyName(keyName);
       if (fuzzyRes) {
         keyName = fuzzyRes.canonicalName;
@@ -942,9 +966,6 @@ export function parseNutritionTableSpatial(result: TextRecognitionResult): Parse
       if (k === 0) {
         primaryRowKey = keyName;
         primaryCategoryOverride = categoryOverride;
-      } else if (!keyName && primaryRowKey) {
-        keyName = primaryRowKey;
-        categoryOverride = primaryCategoryOverride;
       }
 
       // Filter out unanchored generic orphan "Item" rows & single-character noise

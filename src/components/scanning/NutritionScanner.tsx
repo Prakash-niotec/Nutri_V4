@@ -41,6 +41,7 @@ export const NutritionScanner = forwardRef<NutritionScannerRef, NutritionScanner
 
   const consecutiveDetections = useSharedValue(0);
   const isActiveWorklet = useSharedValue(true);
+  const [lightingAlert, setLightingAlert] = React.useState<'too_bright' | 'too_dark' | null>(null);
 
   React.useEffect(() => {
     console.log(`[NutritionScanner] Model State: ${tfModel.state}, Resizer State: ${gpuResizer.state}`);
@@ -242,9 +243,25 @@ export const NutritionScanner = forwardRef<NutritionScannerRef, NutritionScanner
 
       const sharpness = calculateLaplacianVariance(floatBufferView, 640, 640);
 
+      let lumSum = 0;
+      let lumSamples = 0;
+      // Sample Y-luminance channel (indices 0 to 409600)
+      for (let i = 0; i < 409600; i += 500) {
+        lumSum += floatBufferView[i];
+        lumSamples++;
+      }
+      const avgBrightness = lumSamples > 0 ? (lumSum / lumSamples) * 255.0 : 128;
+
       if (now - lastDiagnosticLogTime.value > 1500) {
         lastDiagnosticLogTime.value = now;
-        console.log(`[YOLO-DIAGNOSTIC] Tensor Size: ${numElements}, Score: ${maxScore.toFixed(3)}, Sharpness: ${sharpness.toFixed(1)}`);
+        console.log(`[YOLO-DIAGNOSTIC] Tensor Size: ${numElements}, Score: ${maxScore.toFixed(3)}, Sharpness: ${sharpness.toFixed(1)}, Brightness: ${avgBrightness.toFixed(1)}`);
+        if (avgBrightness > 235) {
+          runOnJS(setLightingAlert)('too_bright');
+        } else if (avgBrightness < 25) {
+          runOnJS(setLightingAlert)('too_dark');
+        } else {
+          runOnJS(setLightingAlert)(null);
+        }
       }
 
       if (bestBox) {
@@ -282,6 +299,7 @@ export const NutritionScanner = forwardRef<NutritionScannerRef, NutritionScanner
         if (isStable) {
           console.log(`[YOLO-STABILITY-PASS] Active Table Lock! Score: ${maxScore.toFixed(3)}, Sharpness: ${sharpness.toFixed(1)}`);
           isActiveWorklet.value = false; // Freeze worklet instantly
+          consecutiveDetections.value = 0; // Reset counter so it never re-fires
           currentBoxJson.value = JSON.stringify({ box: bestBox, frameWidth: frame.width, frameHeight: frame.height });
           runOnJS(onStableDetection)({
             box: bestBox,
@@ -339,6 +357,16 @@ export const NutritionScanner = forwardRef<NutritionScannerRef, NutritionScanner
       />
       <Animated.View style={[styles.boundingBox, animatedStyle]} />
 
+      {lightingAlert && (
+        <View style={styles.lightingPill}>
+          <Text style={styles.lightingText}>
+            {lightingAlert === 'too_bright'
+              ? '⚠️ Lighting Too Bright - Avoid Direct Glare'
+              : '💡 Lighting Too Dark - Move to Brighter Area'}
+          </Text>
+        </View>
+      )}
+
       {tfModel.state !== 'loaded' && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator size="large" color="#10B981" />
@@ -355,6 +383,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  lightingPill: {
+    position: 'absolute',
+    top: 60,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    borderColor: '#F39C12',
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 999,
+  },
+  lightingText: {
+    fontWeight: 'bold',
+    fontSize: 13,
+    color: '#FFCC00',
   },
   center: {
     flex: 1,
