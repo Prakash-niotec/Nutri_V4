@@ -34,11 +34,14 @@ export const evaluateDietaryRestrictions = (food: DetectedFoodData, profile: Use
         if (mapped) {
             const config = DIETARY_MAP[mapped];
             detectedIngredients.forEach(ingredient => {
-                if (config.avoid.some(kw => hasFuzzyMatch([ingredient], kw))) {
+                if (ingredient.length > 80) return; // Skip raw unparsed text block paragraphs
+                const matchedKeyword = config.avoid.find(kw => hasFuzzyMatch([ingredient], kw));
+                if (matchedKeyword) {
+                    const displayIng = ingredient.length > 40 ? matchedKeyword : ingredient;
                     flags.push({
-                        ingredient,
+                        ingredient: displayIng,
                         severity: 'MEDIUM',
-                        reason: `Conflicts with ${config.name} diet (contains '${ingredient}')`,
+                        reason: `Conflicts with ${config.name} diet (contains '${displayIng}')`,
                         matchedRule: `DIET_${mapped.toUpperCase()}`
                     });
                 }

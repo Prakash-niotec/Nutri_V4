@@ -299,12 +299,15 @@ export function fuzzyMatchKeyName(rawKey: string): { canonicalName: string; cate
   const cleaned = cleanKeyName(rawKey).toLowerCase();
   if (cleaned.length <= 1) return null;
 
-  // Direct Keyword Matching for Saturated Fat & Trans Fat sub-indented rows
+  // Direct Keyword Matching for Saturated Fat, Trans Fat & Total Sugar sub-indented rows
   if (cleaned.includes("saturated") || cleaned.includes("saturates")) {
     return { canonicalName: "Saturated Fat", category: "saturatedFat" };
   }
   if (cleaned.includes("trans fat") || cleaned.includes("trans fatty") || cleaned.includes("trans-fat") || cleaned.includes("transfat")) {
     return { canonicalName: "Trans Fat", category: "transFat" };
+  }
+  if (cleaned.includes("total sugar") || cleaned.includes("total sugars") || cleaned.includes("which total sugar") || cleaned.includes("which sugars")) {
+    return { canonicalName: "Total Sugar", category: "sugar" };
   }
 
   for (const def of CANONICAL_KEYS) {
@@ -395,8 +398,9 @@ export function recoverDecimalValue(
     }
   }
 
-  // 2. Fix 3-decimal OCR noise artifacts (e.g. 2.339 -> 2.33) while preserving 2-decimal numbers (e.g. 5.39g, 2.49g, 1.89g, 0.18g)
+  // 2. Fix 3-decimal OCR noise artifacts (e.g. 2.339 -> 2.33) while preserving valid 2-decimal numbers (e.g. 1.58g, 5.34g, 11.46g, 26.72g, 0.18g, 2.33g)
   const valStr = val.toString();
+  const rawClean = rawStr.trim().toLowerCase();
   if (valStr.includes(".")) {
     const parts = valStr.split(".");
     if (parts[1].length === 3 && (parts[1].endsWith("9") || parts[1].endsWith("8"))) {
@@ -408,16 +412,15 @@ export function recoverDecimalValue(
   }
 
   // 3. Universal Zero-Value OCR Guard across ALL nutrients (Trans Fat, Added Sugar, Sat Fat, Sodium, Fiber, Cholesterol, etc.)
-  const rawLower = rawStr.trim().toLowerCase();
   if (
-    rawLower.includes("0.0") ||
-    rawLower.includes("0.00") ||
-    rawLower.includes("0g") ||
-    rawLower.includes("0 g") ||
-    rawLower.includes("0mg") ||
-    rawLower.includes("0 mg") ||
-    rawLower === "0" ||
-    rawLower === "0.0"
+    rawClean.includes("0.0") ||
+    rawClean.includes("0.00") ||
+    rawClean.includes("0g") ||
+    rawClean.includes("0 g") ||
+    rawClean.includes("0mg") ||
+    rawClean.includes("0 mg") ||
+    rawClean === "0" ||
+    rawClean === "0.0"
   ) {
     if (val === 9 || val === 0.09 || val === 0.08 || val === 8 || val === 0.0) {
       val = 0;
@@ -428,7 +431,7 @@ export function recoverDecimalValue(
 
   // OCR Fix for Added Sugar '9' misrecognized from '0' or '9g'
   if (lowerKey.includes("added sugar") || lowerKey.includes("trans")) {
-    if (val === 9 && (rawLower === "9" || rawLower === "9g")) {
+    if (val === 9 && (rawClean === "9" || rawClean === "9g")) {
       val = 0;
       finalUnit = finalUnit || "g";
       return { val, unitStr: finalUnit, rawStr: `0 ${finalUnit}` };
@@ -448,8 +451,21 @@ export function recoverDecimalValue(
     }
   }
 
-  // 5. OCR Fix: Missing decimal dot on 2-digit, 3-digit, and 4-digit numbers (e.g. '79' -> 7.9g, '1146' -> 11.46g, '573' -> 57.3g)
+  // 5. OCR Fix: Missing decimal dot on 2-digit, 3-digit, and 4-digit numbers (e.g. '79' -> 7.9g, '549' -> 5.4g, '379' -> 3.7g, '079' -> 0.7g)
   if (!rawStr.includes(".") && !rawStr.includes(",")) {
+    // Special check for rawStr starting with '0' (e.g. '079' -> 0.7g)
+    if (rawClean.startsWith("0") && (rawClean.endsWith("9") || rawClean.endsWith("8") || rawClean.endsWith("9g") || rawClean.endsWith("8g"))) {
+      const digits = rawClean.replace(/[^0-9]/g, "");
+      if (digits.length === 3) {
+        const floatVal = parseFloat("0." + digits.substring(1, 2));
+        if (!isNaN(floatVal)) {
+          val = floatVal;
+          finalUnit = finalUnit || "g";
+          return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
+        }
+      }
+    }
+
     const isSatOrTransOrFiber = lowerKey.includes("sat") || lowerKey.includes("trans") || lowerKey.includes("fiber") || lowerKey.includes("fibre");
     if (isSatOrTransOrFiber && val >= 25 && val <= 99) {
       val = Math.round((val / 10) * 100) / 100;
@@ -457,7 +473,7 @@ export function recoverDecimalValue(
       return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
     }
 
-    const isMacroKey = lowerKey.includes("sugar") || lowerKey.includes("protein") || lowerKey.includes("fat") || lowerKey.includes("carb");
+    const isMacroKey = lowerKey.includes("sugar") || lowerKey.includes("protein") || lowerKey.includes("fat") || lowerKey.includes("carb") || lowerKey.includes("mineral");
     if (isMacroKey && val >= 50 && val <= 99) {
       val = Math.round((val / 10) * 100) / 100;
       finalUnit = finalUnit || "g";
@@ -474,9 +490,39 @@ export function recoverDecimalValue(
           return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
         }
       } else if (str.length === 3) {
-        const floatVal = val / 10;
-        if (floatVal <= 100) {
-          val = floatVal;
+        if (str.endsWith("9")) {
+          if (val >= 400) {
+            // 449 -> 44.9g (from 44.50g or 44.9g Total Sugar), 579 -> 57.9g Carbohydrate
+            const floatVal = val / 10;
+            if (floatVal <= 100) {
+              val = Math.round(floatVal * 100) / 100;
+              finalUnit = finalUnit || "g";
+              return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
+            }
+          } else {
+            // 549 -> 5.4g, 379 -> 3.7g, 359 -> 3.5g
+            const floatVal = parseFloat(str.substring(0, 1) + "." + str.substring(1, 2));
+            if (!isNaN(floatVal) && floatVal <= 100) {
+              val = floatVal;
+              finalUnit = finalUnit || "g";
+              return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
+            }
+          }
+        } else if (str.endsWith("8") && rawClean.startsWith("0")) {
+          // 078 -> 0.7g
+          const floatVal = parseFloat("0." + str.substring(1, 2));
+          if (!isNaN(floatVal)) {
+            val = floatVal;
+            finalUnit = finalUnit || "g";
+            return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
+          }
+        } else {
+          // 158 -> 1.58g (Protein), 632 -> 6.32g (Total Fat), 534 -> 5.34g (Sat Fat)
+          let floatVal = val / 10;
+          if (floatVal > 25 || (lowerKey.includes("protein") && val > 120 && val < 250)) {
+            floatVal = val / 100;
+          }
+          val = Math.round(floatVal * 100) / 100;
           finalUnit = finalUnit || "g";
           return { val, unitStr: finalUnit, rawStr: `${val} ${finalUnit}` };
         }
@@ -787,7 +833,7 @@ export function extractFullIngredientList(rawText: string): string[] {
   const text = rawText.replace(/\r\n/g, "\n");
   const lowerText = text.toLowerCase();
 
-  const headers = ["ingredients:", "ingredients", "composition:", "contains:"];
+  const headers = ["ingredients:", "ingredient :", "ingredient:", "ingredients", "composition:", "contains:"];
   let startIndex = -1;
   let matchedHeaderLength = 0;
 
@@ -801,10 +847,12 @@ export function extractFullIngredientList(rawText: string): string[] {
     }
   }
 
-  let ingredientBlock = text;
-  if (startIndex !== -1) {
-    ingredientBlock = text.substring(startIndex + matchedHeaderLength);
+  // If no explicit ingredient header exists in the text, do not return raw OCR text as ingredients
+  if (startIndex === -1) {
+    return [];
   }
+
+  let ingredientBlock = text.substring(startIndex + matchedHeaderLength);
 
   const stopHeaders = ["nutrition facts", "nutrition information", "storage:", "manufactured by", "batch no"];
   let stopIndex = ingredientBlock.length;
