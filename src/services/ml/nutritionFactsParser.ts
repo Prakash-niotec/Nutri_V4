@@ -398,7 +398,7 @@ export function recoverDecimalValue(
     }
   }
 
-  // 2. Fix 3-decimal OCR noise artifacts (e.g. 2.339 -> 2.33) while preserving valid 2-decimal numbers (e.g. 1.58g, 5.34g, 11.46g, 26.72g, 0.18g, 2.33g)
+  // 2. Fix 3-decimal and 2-decimal unit 'g' misread artifacts while PRESERVING ALL VALID 2-decimal numbers (e.g. 6.32g, 1.58g, 5.34g, 26.72g, 11.46g, 0.18g, 0.04g)
   const valStr = val.toString();
   const rawClean = rawStr.trim().toLowerCase();
   if (valStr.includes(".")) {
@@ -407,6 +407,16 @@ export function recoverDecimalValue(
       const fixed = parseFloat(`${parts[0]}.${parts[1].substring(0, 2)}`);
       if (!isNaN(fixed)) {
         val = fixed;
+      }
+    } else if (parts[1].length === 2 && parts[1].endsWith("9")) {
+      const isMacroOrMineral = lowerKey.includes("protein") || lowerKey.includes("fat") || lowerKey.includes("sugar") || lowerKey.includes("carb") || lowerKey.includes("mineral") || lowerKey.includes("fiber");
+      const hasTwoExplicitDecimalDigits = /\d+\.\d{2}\s*g$/i.test(rawClean);
+
+      if (isMacroOrMineral && !hasTwoExplicitDecimalDigits) {
+        const fixed = parseFloat(`${parts[0]}.${parts[1].substring(0, 1)}`);
+        if (!isNaN(fixed)) {
+          val = fixed;
+        }
       }
     }
   }

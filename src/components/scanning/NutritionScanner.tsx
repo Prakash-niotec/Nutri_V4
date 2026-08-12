@@ -67,9 +67,10 @@ export const NutritionScanner = forwardRef<NutritionScannerRef, NutritionScanner
     },
     async takeSnapshot() {
       if (!cameraRef.current) return null;
-      console.log("[NutritionScanner] Grabbing preview frame snapshot...");
+      triggerFocus();
+      console.log("[NutritionScanner] Grabbing high-quality snapshot...");
       const image = await cameraRef.current.takeSnapshot();
-      const tempPath = await image.saveToTemporaryFileAsync('jpg', 85);
+      const tempPath = await image.saveToTemporaryFileAsync('jpg', 90);
       return {
         path: tempPath,
         details: JSON.parse(currentBoxJson.value || '{}'),

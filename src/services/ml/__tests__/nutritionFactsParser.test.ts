@@ -35,9 +35,9 @@ describe('Nutrient Facts Parser & 2-Decimal Precision Suite', () => {
   });
 
   describe('2-Decimal Number Precision & Decimal Point Recovery', () => {
-    it('preserves valid sub-gram 2-decimal values like 0.18g, 2.33g, 0.04g, 5.39g', () => {
+    it('preserves valid sub-gram 2-decimal values like 0.18g, 2.33g, 0.04g while trimming misread unit g digit 9 on macros (5.39 -> 5.3g)', () => {
       expect(recoverDecimalValue('0.18g', 0.18, 'g', 'saturated fat').val).toBe(0.18);
-      expect(recoverDecimalValue('5.39g', 5.39, 'g', 'sugar').val).toBe(5.39);
+      expect(recoverDecimalValue('5.39', 5.39, 'g', 'sugar').val).toBe(5.3);
       expect(recoverDecimalValue('2.33g', 2.33, 'g', 'fat').val).toBe(2.33);
       expect(recoverDecimalValue('0.04g', 0.04, 'g', 'trans fat').val).toBe(0.04);
     });
@@ -58,9 +58,18 @@ describe('Nutrient Facts Parser & 2-Decimal Precision Suite', () => {
       expect(recoverDecimalValue('079', 79, 'g', 'minerals').val).toBe(0.7);
     });
 
-    it('preserves valid 2-decimal numbers like 1.58g protein, 5.34g sat fat, 0.18g trans fat', () => {
+    it('trims misread unit g digit 9 on 2-decimal floats for 1-column labels (3.79 -> 3.7g, 5.49 -> 5.4g, 0.79 -> 0.7g)', () => {
+      expect(recoverDecimalValue('3.79', 3.79, 'g', 'total sugar').val).toBe(3.7);
+      expect(recoverDecimalValue('5.49', 5.49, 'g', 'carbohydrate').val).toBe(5.4);
+      expect(recoverDecimalValue('0.79', 0.79, 'g', 'minerals').val).toBe(0.7);
+    });
+
+    it('preserves valid 2-decimal numbers like 6.32g total fat, 1.58g protein, 5.34g sat fat, 11.46g carbs, 26.72g sat fat', () => {
+      expect(recoverDecimalValue('6.32g', 6.32, 'g', 'total fat').val).toBe(6.32);
       expect(recoverDecimalValue('1.58g', 1.58, 'g', 'protein').val).toBe(1.58);
       expect(recoverDecimalValue('5.34g', 5.34, 'g', 'saturated fat').val).toBe(5.34);
+      expect(recoverDecimalValue('11.46g', 11.46, 'g', 'carbohydrates').val).toBe(11.46);
+      expect(recoverDecimalValue('26.72g', 26.72, 'g', 'saturated fat').val).toBe(26.72);
       expect(recoverDecimalValue('0.18g', 0.18, 'g', 'saturated fat').val).toBe(0.18);
       expect(recoverDecimalValue('0.04g', 0.04, 'g', 'trans fat').val).toBe(0.04);
     });

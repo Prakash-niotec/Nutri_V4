@@ -24,6 +24,7 @@ import { NutritionScanner } from '../../components/scanning/NutritionScanner';
 import { fuseOcrResults } from '../../services/ml/ocrFusion';
 import { normalizeOcrIngredients } from '../../services/nutrition/ingredientDatabase';
 import { enhanceImageForOcr, cleanTempEnhancedFiles } from '../../services/ml/imageEnhancer';
+import { validateAndHealNutritionData } from '../../services/ml/nutritionCrossValidator';
 
 // Adapter to map AuthContext user profile format to Health Engine format
 const mapAuthProfileToHealthProfile = (authProfile) => {
@@ -310,7 +311,8 @@ const ScanScreen = ({ navigation }) => {
 
     try {
       const ocrResults = [];
-      for (let i = 0; i < 2; i++) {
+      // Multi-Frame Burst Fusion on Manual Shutter Tap: Collect 3 rapid snapshots (at t=0, t=100ms, t=200ms)
+      for (let i = 0; i < 3; i++) {
         if (!scannerRef.current) break;
         try {
           const snapshot = await scannerRef.current.takeSnapshot();
@@ -332,8 +334,7 @@ const ScanScreen = ({ navigation }) => {
         } catch (sErr) {
           console.warn("Snapshot capture warning:", sErr);
         }
-        if (ocrResults.length > 0) break; // As soon as 1 valid snapshot succeeds, proceed!
-        if (i < 1) await new Promise(r => setTimeout(r, 150));
+        if (i < 2) await new Promise(r => setTimeout(r, 100));
       }
 
       if (ocrResults.length === 0) {
@@ -468,6 +469,15 @@ const ScanScreen = ({ navigation }) => {
         }
       }
 
+      // Run 4-Layer Self-Healing Engine (Cross-Column Ratio, Sub-Nutrient Boundaries, Atwater Verification)
+      const healingResult = validateAndHealNutritionData(per100gItems, perServingItems, cleanedMetadata);
+      let healedPer100g = healingResult.healedPer100gItems;
+      let healedPerServing = healingResult.healedPerServingItems;
+
+      if (healingResult.correctionsApplied.length > 0) {
+        console.log('[Self-Healing Engine] Corrections applied:', healingResult.correctionsApplied);
+      }
+
       const getMacro = (category) => {
         const item = fusedResult.facts.tableItems?.find(i => i.normalizedKey === category);
         return item ? item.numericValue : undefined;
@@ -478,9 +488,9 @@ const ScanScreen = ({ navigation }) => {
         detectedIngredients,
         detectedAllergenTags,
         metadata: cleanedMetadata,
-        per100gItems,
-        perServingItems,
-        allNutrientItems: per100gItems.length > 0 ? per100gItems : perServingItems,
+        per100gItems: healedPer100g,
+        perServingItems: healedPerServing,
+        allNutrientItems: healedPer100g.length > 0 ? healedPer100g : healedPerServing,
         nutritionFacts: {
           unit: fusedResult.facts.unit,
           calories: fusedResult.facts.calories,
@@ -499,10 +509,10 @@ const ScanScreen = ({ navigation }) => {
 
       // Secondary Evaluation (Per Serving)
       let evaluationServing = null;
-      if (perServingItems.length > 0) {
+      if (healedPerServing.length > 0) {
         const servingFood = {
           ...scannedFood,
-          allNutrientItems: perServingItems,
+          allNutrientItems: healedPerServing,
           nutritionFacts: {
             ...scannedFood.nutritionFacts,
             unit: 'perServing'
