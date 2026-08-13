@@ -33,12 +33,59 @@ export interface DetectedFoodData {
     confidence?: number;
 }
 
+export type HealthCondition =
+  | 'diabetes'
+  | 'highBloodPressure'
+  | 'heartDisease'
+  | 'highCholesterol'
+  | 'kidneyDisease';
+
 export type MedicalCondition =
     | 'diabetes'
     | 'high_blood_pressure'
     | 'heart_disease'
     | 'kidney_disease'
-    | 'high_cholesterol';
+    | 'high_cholesterol'
+    | HealthCondition;
+
+export type NutrientUnit = 'mg' | 'g' | '%DV' | '%energy';
+
+export type LabelAvailability =
+  | 'mandatory'
+  | 'voluntary'
+  | 'rarelyPrinted';
+
+export interface NutrientThreshold {
+  nutrient: string;
+  unit: NutrientUnit;
+  limit: number;
+  limitMax?: number;
+  comparison: 'lte' | 'gte' | 'range';
+  scope: 'perServing' | 'perDay' | 'perTablespoon' | 'per100g';
+  labelAvailability: LabelAvailability;
+  referenceOnly: boolean;
+  note?: string;
+}
+
+export interface IngredientRule {
+  term: string;
+  category: string;
+  positionWeighting: 'high' | 'moderate' | 'flagOnly';
+  isProxyForUnmeasurableNutrient?: boolean;
+}
+
+export interface ConditionRules {
+  avoidIngredients: IngredientRule[];
+  safeIngredients: IngredientRule[];
+  nutrientThresholds: NutrientThreshold[];
+}
+
+export interface ConditionConflict {
+  ingredientOrCategory: string;
+  recommendedFor: HealthCondition[];
+  avoidFor: HealthCondition[];
+  note: string;
+}
 
 export type Allergy =
     | 'dairy'
