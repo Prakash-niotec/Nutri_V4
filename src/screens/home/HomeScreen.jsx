@@ -100,23 +100,6 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.scanCardTitle}>Packed Food</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Health Level Card */}
-          <View style={styles.healthCard}>
-            <View style={styles.healthCardHeader}>
-              <Text style={styles.healthCardTitle}>Health Level</Text>
-              <View style={styles.optimalBadge}>
-                <Text style={styles.optimalBadgeText}>80% Optimal</Text>
-              </View>
-            </View>
-            <View style={styles.progressBarTrack}>
-              <View style={[styles.progressBarFill, { width: '80%' }]} />
-            </View>
-            <View style={styles.healthCardFooter}>
-              <Text style={styles.footerLabel}>IMPROVING</Text>
-              <Text style={styles.footerLabel}>DAILY GOAL</Text>
-            </View>
-          </View>
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -252,62 +235,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.fonts.bold,
     fontSize: fs(16),
     color: '#1A1A1A',
-  },
-  healthCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: wp(6),
-    padding: wp(5),
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 3,
-    marginBottom: hp(2),
-  },
-  healthCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: hp(1.8),
-  },
-  healthCardTitle: {
-    fontFamily: typography.fonts.bold,
-    fontSize: fs(18),
-    color: '#1A1A1A',
-  },
-  optimalBadge: {
-    backgroundColor: '#E2F6E8',
-    paddingHorizontal: wp(3),
-    paddingVertical: hp(0.7),
-    borderRadius: wp(3.5),
-  },
-  optimalBadgeText: {
-    fontFamily: typography.fonts.semiBold,
-    fontSize: fs(12),
-    color: '#198754',
-  },
-  progressBarTrack: {
-    height: hp(2.8),
-    backgroundColor: '#E2EFE3',
-    borderRadius: wp(3),
-    overflow: 'hidden',
-    marginBottom: hp(1.2),
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#2ECC71',
-    borderRadius: wp(3),
-  },
-  healthCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  footerLabel: {
-    fontFamily: typography.fonts.bold,
-    fontSize: fs(11),
-    color: '#666666',
-    letterSpacing: 0.5,
   },
 });
 
